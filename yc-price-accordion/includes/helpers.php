@@ -42,7 +42,7 @@ function yc_pa_branch_url_tpl($branch){
     $p = wp_parse_url($tpl);
     if (is_array($p) && !empty($p['host'])) {
       $origin = (isset($p['scheme']) ? $p['scheme'] : 'https') . '://' . $p['host'];
-      if (!empty($p['port'])) $origin += ':' . $p['port'];
+      if (!empty($p['port'])) $origin .= ':' . $p['port'];
       $tpl = $origin . '/company/{company_id}/personal/{book_step}?o=s{service_id}';
     } else {
       $base = rtrim($tpl, '/');
