@@ -2,9 +2,13 @@
 if (!defined('ABSPATH')) exit;
 
 class YC_Admin_Priority {
-    public static function init() {
+    public static function boot(): void {
         add_action('admin_menu', [__CLASS__, 'menu']);
         add_action('admin_init', [__CLASS__, 'settings']);
+    }
+
+    public static function init(): void {
+        self::boot();
     }
     public static function settings() {
         register_setting('yc_staff_priority_group', 'yc_staff_admin_order_map', ['type'=>'string','sanitize_callback'=> 'wp_kses_post']);
@@ -28,4 +32,3 @@ class YC_Admin_Priority {
         echo '</form></div>';
     }
 }
-YC_Admin_Priority::init();
