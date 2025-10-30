@@ -18,11 +18,13 @@ class YC_Admin {
   const OPTION_SHOW_STAFF='yc_show_staff';
   const OPTION_TITLE_STAFF='yc_title_staff';
   const OPTION_TITLE_PRICE='yc_title_price';
+  const OPTION_LAST_SYNC='yc_pa_last_sync';
 
   public static function init(){
     add_action('admin_menu',[__CLASS__,'menu']);
     add_action('admin_init',[__CLASS__,'settings']);
     add_action('admin_enqueue_scripts',[__CLASS__,'assets']);
+    add_action('admin_post_yc_pa_sync',[__CLASS__,'handle_sync']);
     foreach([self::OPTION_BRANCHES,self::OPTION_CACHE_TTL,self::OPTION_PARTNER,self::OPTION_USER] as $opt){
       add_action('update_option_'.$opt,[__CLASS__,'flush_cache'],10,3);
     }
@@ -295,9 +297,23 @@ class YC_Admin {
   }
 
   public static function render_page(){
+    $notice = get_transient('yc_pa_sync_notice');
+    if ($notice && is_array($notice)) {
+      delete_transient('yc_pa_sync_notice');
+      $class = isset($notice['type']) && $notice['type'] === 'error' ? 'notice notice-error' : 'notice notice-success';
+      $message = isset($notice['message']) ? esc_html($notice['message']) : '';
+      if ($message !== '') {
+        printf('<div class="%s"><p>%s</p></div>', $class, $message);
+      }
+    }
+
     echo '<div class="wrap"><h1 style="margin-bottom:12px;">Настройки YClients</h1><div class="yc-admin-card"><form method="post" action="options.php">';
     settings_fields('yc_price_group'); do_settings_sections('yc-price-settings'); submit_button();
-    echo '</form></div></div>';
+    echo '</form></div>';
+
+    self::render_sync_card();
+
+    echo '</div>';
   }
 
   public static function assets($hook){
@@ -310,6 +326,70 @@ class YC_Admin {
     global $wpdb;
     $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_yc_pa_%'");
     $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_timeout_yc_pa_%'");
+    if (class_exists('YC_Storage')) {
+      YC_Storage::purge_all();
+    }
+    delete_option(self::OPTION_LAST_SYNC);
+  }
+
+  protected static function settings_url(){
+    return admin_url('options-general.php?page=yc-price-settings');
+  }
+
+  protected static function render_sync_card(){
+    $last_sync = (int) get_option(self::OPTION_LAST_SYNC, 0);
+    $last_sync_text = $last_sync > 0 ? date_i18n(get_option('date_format').' '.get_option('time_format'), $last_sync) : __('ещё не выполнялась', 'yc-price-accordion');
+
+    echo '<div class="yc-admin-card">';
+    echo '<h2>' . esc_html__('Синхронизация данных', 'yc-price-accordion') . '</h2>';
+    echo '<p class="description">' . esc_html__('Выгружает категории, услуги и специалистов из YClients и сохраняет локально в WordPress. Используйте после изменения данных в личном кабинете.', 'yc-price-accordion') . '</p>';
+    echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+    wp_nonce_field('yc_pa_sync_action', 'yc_pa_sync_nonce');
+    echo '<input type="hidden" name="action" value="yc_pa_sync" />';
+    submit_button(__('Обновить данные YClients', 'yc-price-accordion'), 'secondary', 'submit', false);
+    echo '</form>';
+    echo '<p class="description">' . esc_html__('Последняя успешная синхронизация:', 'yc-price-accordion') . ' ' . esc_html($last_sync_text) . '</p>';
+    echo '</div>';
+  }
+
+  public static function handle_sync(){
+    if (!current_user_can('manage_options')) {
+      wp_die(__('Недостаточно прав.', 'yc-price-accordion'));
+    }
+    check_admin_referer('yc_pa_sync_action', 'yc_pa_sync_nonce');
+
+    $branches = yc_get_branches();
+    $updated  = 0;
+    $errors   = array();
+
+    if (is_array($branches)) {
+      foreach ($branches as $branch) {
+        $cid = isset($branch['id']) ? (int) $branch['id'] : 0;
+        if ($cid <= 0) {
+          continue;
+        }
+        $sync = YC_API::sync_company($cid, true);
+        if (!empty($sync['errors'])) {
+          $errors = array_merge($errors, $sync['errors']);
+        } else {
+          $updated++;
+        }
+      }
+    }
+
+    if ($updated > 0 && empty($errors)) {
+      update_option(self::OPTION_LAST_SYNC, time(), false);
+      set_transient('yc_pa_sync_notice', array('type' => 'success', 'message' => sprintf(__('Синхронизация завершена: обновлено филиалов — %d.', 'yc-price-accordion'), $updated)), 30);
+    } elseif ($updated > 0) {
+      update_option(self::OPTION_LAST_SYNC, time(), false);
+      set_transient('yc_pa_sync_notice', array('type' => 'error', 'message' => sprintf(__('Обновлено филиалов — %1$d. Ошибки: %2$s', 'yc-price-accordion'), $updated, implode('; ', $errors))), 30);
+    } else {
+      $message = empty($errors) ? __('Не удалось выполнить синхронизацию.', 'yc-price-accordion') : implode('; ', $errors);
+      set_transient('yc_pa_sync_notice', array('type' => 'error', 'message' => $message), 30);
+    }
+
+    wp_safe_redirect(self::settings_url());
+    exit;
   }
 
     public static function sanitize_staff_order( $input ) {

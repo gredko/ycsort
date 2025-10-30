@@ -47,13 +47,26 @@ class YC_API {
     return array('error'=>'HTTP '.$code,'raw'=>$body);
   }
 
-  public static function get_categories($company_id){
-    $ckey='cats_'.intval($company_id);
-    if (!yc_pa_debug_enabled()){
-      $c=yc_pa_cache_get($ckey);
-      if ($c!==false && $c!==null) return $c;
+  protected static function is_fresh($company_id, $section, $cached){
+    if ($cached === null) {
+      return false;
     }
+    $ttl = yc_pa_cache_ttl();
+    if ($ttl <= 0) {
+      return true;
+    }
+    $updated = YC_Storage::get_section_timestamp($company_id, $section);
+    if ($updated <= 0) {
+      return false;
+    }
+    return (time() - $updated) < $ttl;
+  }
+
+  protected static function fetch_categories($company_id){
     $json = self::request('/company/'.intval($company_id).'/service_categories');
+    if (isset($json['error'])) {
+      return $json;
+    }
     $data = is_array(isset($json['data'])?$json['data']:null)?$json['data']:array();
     $map = array();
     foreach($data as $row){
@@ -61,28 +74,22 @@ class YC_API {
       $name = trim(isset($row['title'])?$row['title']:(isset($row['name'])?$row['name']:''));
       if ($cid>0 && $name!=='') $map[$cid]=$name;
     }
-    if (!yc_pa_debug_enabled()) yc_pa_cache_set($ckey,$map);
     return $map;
   }
 
-  public static function get_services($company_id,$category_id=null){
-    $params=array(); if (!empty($category_id)) $params['category_id']=$category_id;
-    $ckey='svc_'.intval($company_id).'_'.md5(json_encode($params));
-    if (!yc_pa_debug_enabled()){
-      $c=yc_pa_cache_get($ckey); if ($c!==false && $c!==null) return $c;
+  protected static function fetch_services($company_id){
+    $json = self::request('/company/'.intval($company_id).'/services');
+    if (isset($json['error'])) {
+      return $json;
     }
-    $json = self::request('/company/'.intval($company_id).'/services',$params);
-    $data = is_array(isset($json['data'])?$json['data']:null)?$json['data']:array();
-    if (!yc_pa_debug_enabled()) yc_pa_cache_set($ckey,$data);
-    return $data;
+    return is_array(isset($json['data'])?$json['data']:null)?$json['data']:array();
   }
 
-  public static function get_staff($company_id){
-    $ckey='staff_'.intval($company_id);
-    if (!yc_pa_debug_enabled()){
-      $c=yc_pa_cache_get($ckey); if ($c!==false && $c!==null) return $c;
-    }
+  protected static function fetch_staff($company_id){
     $resp = self::request('/company/'.intval($company_id).'/staff');
+    if (isset($resp['error'])) {
+      return $resp;
+    }
     $staffs = array();
     if (!empty($resp['data']) && is_array($resp['data'])){
       foreach($resp['data'] as $s){
@@ -103,7 +110,7 @@ class YC_API {
       }
     }
     if (empty($staffs)){
-      $services = self::get_services($company_id,null);
+      $services = self::get_services($company_id,null,true);
       foreach($services as $svc){
         if (!empty($svc['staff']) && is_array($svc['staff'])){
           foreach($svc['staff'] as $st){
@@ -124,7 +131,150 @@ class YC_API {
         }
       }
     }
-    if (!yc_pa_debug_enabled()) yc_pa_cache_set($ckey,$staffs);
     return $staffs;
+  }
+
+  public static function get_categories($company_id, $force = false){
+    $cid = intval($company_id);
+    $cached = YC_Storage::get_section($cid, 'categories');
+    if (!$force && !yc_pa_debug_enabled() && self::is_fresh($cid, 'categories', $cached)){
+      return $cached;
+    }
+    $map = self::fetch_categories($cid);
+    if (!isset($map['error'])) {
+      YC_Storage::set_section($cid, 'categories', $map);
+      return $map;
+    }
+    return is_array($cached) ? $cached : array();
+  }
+
+  protected static function service_matches_category($service, $category_id){
+    $target = intval($category_id);
+    if ($target <= 0) {
+      return false;
+    }
+    if (isset($service['category_id']) && intval($service['category_id']) === $target) {
+      return true;
+    }
+    if (isset($service['categoryId']) && intval($service['categoryId']) === $target) {
+      return true;
+    }
+    if (isset($service['category']) && is_array($service['category'])) {
+      $cid = 0;
+      if (isset($service['category']['id'])) {
+        $cid = intval($service['category']['id']);
+      } elseif (isset($service['category'][0])) {
+        $cid = intval($service['category'][0]);
+      }
+      if ($cid === $target) {
+        return true;
+      }
+    }
+    if (isset($service['categories']) && is_array($service['categories'])) {
+      foreach ($service['categories'] as $cat) {
+        if (is_array($cat)) {
+          if (isset($cat['id']) && intval($cat['id']) === $target) {
+            return true;
+          }
+          if (isset($cat[0]) && intval($cat[0]) === $target) {
+            return true;
+          }
+        } elseif (intval($cat) === $target) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  public static function get_services($company_id, $category_id=null, $force=false){
+    $cid = intval($company_id);
+    $cached = YC_Storage::get_section($cid, 'services_all');
+    if (!$force && !yc_pa_debug_enabled() && self::is_fresh($cid, 'services_all', $cached)){
+      $services = is_array($cached) ? $cached : array();
+    } else {
+      $services = self::fetch_services($cid);
+      if (!isset($services['error'])) {
+        YC_Storage::set_section($cid, 'services_all', $services);
+      } elseif (is_array($cached)) {
+        $services = $cached;
+      } else {
+        $services = array();
+      }
+    }
+
+    if ($category_id === null || $category_id === '' || !is_numeric($category_id)){
+      return is_array($services) ? $services : array();
+    }
+
+    $category_id = intval($category_id);
+    if ($category_id <= 0) {
+      return is_array($services) ? $services : array();
+    }
+
+    $filtered = array();
+    foreach ($services as $service){
+      if (self::service_matches_category($service, $category_id)){
+        $filtered[] = $service;
+      }
+    }
+    return $filtered;
+  }
+
+  public static function get_staff($company_id, $force = false){
+    $cid = intval($company_id);
+    $cached = YC_Storage::get_section($cid, 'staff');
+    if (!$force && !yc_pa_debug_enabled() && self::is_fresh($cid, 'staff', $cached)){
+      return is_array($cached) ? $cached : array();
+    }
+    $staffs = self::fetch_staff($cid);
+    if (!isset($staffs['error'])) {
+      YC_Storage::set_section($cid, 'staff', $staffs);
+      return $staffs;
+    }
+    return is_array($cached) ? $cached : array();
+  }
+
+  public static function sync_company($company_id, $force = false){
+    $cid = intval($company_id);
+    if ($cid <= 0) {
+      return array('categories'=>false,'services'=>false,'staff'=>false,'errors'=>array('invalid company'));
+    }
+    $result = array('categories'=>false,'services'=>false,'staff'=>false,'errors'=>array());
+
+    $cats_cached = YC_Storage::get_section($cid, 'categories');
+    if ($force || yc_pa_debug_enabled() || !self::is_fresh($cid, 'categories', $cats_cached)) {
+      $cats = self::fetch_categories($cid);
+      if (isset($cats['error'])) {
+        $result['errors'][] = 'categories: ' . $cats['error'];
+      } else {
+        YC_Storage::set_section($cid, 'categories', $cats);
+        $result['categories'] = true;
+      }
+    }
+
+    $svc_cached = YC_Storage::get_section($cid, 'services_all');
+    if ($force || yc_pa_debug_enabled() || !self::is_fresh($cid, 'services_all', $svc_cached)) {
+      $services = self::fetch_services($cid);
+      if (isset($services['error'])) {
+        $result['errors'][] = 'services: ' . $services['error'];
+      } else {
+        YC_Storage::set_section($cid, 'services_all', $services);
+        $result['services'] = true;
+      }
+    }
+
+    $staff_cached = YC_Storage::get_section($cid, 'staff');
+    if ($force || yc_pa_debug_enabled() || !self::is_fresh($cid, 'staff', $staff_cached)) {
+      $staff = self::fetch_staff($cid);
+      if (isset($staff['error'])) {
+        $result['errors'][] = 'staff: ' . $staff['error'];
+      } else {
+        YC_Storage::set_section($cid, 'staff', $staff);
+        $result['staff'] = true;
+      }
+    }
+
+    return $result;
   }
 }
