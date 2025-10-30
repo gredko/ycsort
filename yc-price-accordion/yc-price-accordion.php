@@ -2,7 +2,7 @@
 /**
  * Plugin Name: YClients Price Accordion Pro
  * Description: Прайс YClients: несколько филиалов, аккордеон, специалисты (опционально), кэш, UTM/запись, lazy, прогрев.
- * Version: 1.6.45
+ * Version: 1.7.0
  * Author: ChatGPT
  * License: GPLv2 or later
  */
@@ -10,7 +10,7 @@
 defined('ABSPATH') || exit;
 
 if (!defined('YC_PA_VER')) {
-    define('YC_PA_VER', '1.6.45');
+    define('YC_PA_VER', '1.7.0');
 }
 
 if (!defined('YC_PA_FILE')) {
@@ -64,6 +64,7 @@ final class YC_Price_Accordion_Pro {
 
     public static function load_dependencies() : void {
         require_once YC_PA_DIR . 'includes/helpers.php';
+        require_once YC_PA_DIR . 'includes/class-yc-storage.php';
         require_once YC_PA_DIR . 'includes/class-yc-api.php';
         require_once YC_PA_DIR . 'public/class-yc-shortcode.php';
 
@@ -103,10 +104,9 @@ final class YC_Price_Accordion_Pro {
             if ($company_id <= 0) {
                 continue;
             }
-            YC_API::get_categories($company_id);
-            YC_API::get_services($company_id, null);
-            YC_API::get_staff($company_id);
+            YC_API::sync_company($company_id, false);
         }
+        update_option('yc_pa_last_sync', time(), false);
     }
 }
 
