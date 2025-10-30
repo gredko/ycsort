@@ -184,6 +184,10 @@ function yc_sanitize_position($pos){
 function yc_normalize_name($name){
   $name = trim((string)$name);
   $name = preg_replace('/\s+/u',' ',$name);
-  $name = mb_strtolower($name, 'UTF-8');
+  if (function_exists('mb_strtolower')) {
+    $name = mb_strtolower($name, 'UTF-8');
+  } else {
+    $name = strtolower($name);
+  }
   return $name;
 }
