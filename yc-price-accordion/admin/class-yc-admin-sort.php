@@ -13,6 +13,10 @@ class YC_Admin_Sort {
         add_action('admin_init', [__CLASS__, 'settings']);
     }
 
+    public static function init() : void {
+        self::boot();
+    }
+
     public static function menu() : void {
         /* removed yc-price-staff-order page */
     }
@@ -53,5 +57,4 @@ class YC_Admin_Sort {
         echo '</form></div>';
     }
 }
-YC_Admin_Sort::boot();
 }

@@ -24,6 +24,7 @@ function yc_pa_cache_get($k){ return get_transient('yc_pa_' . $k); }
 function yc_pa_cache_set($k,$v){ $ttl = yc_pa_cache_ttl(); if ($ttl > 0) set_transient('yc_pa_' . $k, $v, $ttl); }
 
 function yc_pa_debug_enabled(){ return !!intval(get_option('yc_debug',0)); }
+function yc_pa_render_from_cache_only(){ return !!intval(get_option('yc_render_from_cache_only',1)); }
 function yc_pa_multi_cats_enabled(){ return !!intval(get_option('yc_multi_categories',0)); }
 function yc_pa_show_staff(){ return !!intval(get_option('yc_show_staff',1)); }
 function yc_pa_vlist_page(){ $n=intval(get_option('yc_vlist_page',15)); return $n>4 ? $n : 15; }

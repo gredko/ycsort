@@ -8,6 +8,13 @@ class YC_Admin {
         add_action('admin_init', array(__CLASS__, 'settings'));
     }
 
+    /**
+     * Backwards compatibility with legacy bootstrap that called ::init().
+     */
+    public static function init(){
+        self::boot();
+    }
+
     public static function menu(){
         add_options_page(
             'YClients Прайс (Кеш)',
