@@ -21,7 +21,12 @@ function yc_get_branches() {
 
 function yc_pa_cache_ttl(){ return max(0, intval(get_option('yc_cache_ttl', 15))) * MINUTE_IN_SECONDS; }
 function yc_pa_cache_get($k){ return get_transient('yc_pa_' . $k); }
-function yc_pa_cache_set($k,$v){ $ttl = yc_pa_cache_ttl(); if ($ttl > 0) set_transient('yc_pa_' . $k, $v, $ttl); }
+function yc_pa_cache_set($k,$v){
+  $ttl = yc_pa_cache_ttl();
+  if ($ttl > 0) {
+    set_transient('yc_pa_' . $k, $v, $ttl);
+  }
+}
 
 function yc_pa_debug_enabled(){ return !!intval(get_option('yc_debug',0)); }
 function yc_pa_multi_cats_enabled(){ return !!intval(get_option('yc_multi_categories',0)); }
@@ -41,7 +46,7 @@ function yc_pa_branch_url_tpl($branch){
     $p = wp_parse_url($tpl);
     if (is_array($p) && !empty($p['host'])) {
       $origin = (isset($p['scheme']) ? $p['scheme'] : 'https') . '://' . $p['host'];
-      if (!empty($p['port'])) $origin += ':' . $p['port'];
+      if (!empty($p['port'])) $origin .= ':' . $p['port'];
       $tpl = $origin . '/company/{company_id}/personal/{book_step}?o=s{service_id}';
     } else {
       $base = rtrim($tpl, '/');
@@ -72,6 +77,74 @@ function yc_get_staff_link($branch_id, $staff_id){
     return esc_url($map[$branch_id][$staff_id]);
   }
   return '';
+}
+
+function yc_pa_get_manual_staff_order(){
+  $raw = get_option('yc_staff_order', array());
+  if (!is_array($raw)) {
+    return array();
+  }
+
+  $out = array();
+  foreach ($raw as $company_id => $weights) {
+    if (!is_array($weights)) {
+      continue;
+    }
+    $company_id = (string) $company_id;
+    foreach ($weights as $staff_id => $weight) {
+      $sid = (int) $staff_id;
+      $w   = (int) $weight;
+      if ($sid <= 0) {
+        continue;
+      }
+      if (!isset($out[$company_id])) {
+        $out[$company_id] = array();
+      }
+      $out[$company_id][$sid] = $w > 0 ? $w : 9999;
+    }
+  }
+
+  return $out;
+}
+
+function yc_pa_get_global_staff_order(){
+  $company_map = yc_pa_get_manual_staff_order();
+  if (empty($company_map)) {
+    return array();
+  }
+  $global = array();
+  foreach ($company_map as $weights) {
+    foreach ($weights as $staff_id => $weight) {
+      if (!isset($global[$staff_id]) || $weight < $global[$staff_id]) {
+        $global[$staff_id] = $weight;
+      }
+    }
+  }
+  return $global;
+}
+
+function yc_pa_parse_priority_map($raw){
+  if (!is_string($raw) || $raw === '') {
+    return array();
+  }
+  $map = array();
+  $lines = preg_split('/[\r\n]+/', $raw);
+  foreach ($lines as $line) {
+    $line = trim($line);
+    if ($line === '' || strpos($line, '=') === false) {
+      continue;
+    }
+    list($name, $weight) = array_map('trim', explode('=', $line, 2));
+    if ($name === '') {
+      continue;
+    }
+    $key = yc_normalize_name($name);
+    if ($key === '') {
+      continue;
+    }
+    $map[$key] = max(1, (int) $weight);
+  }
+  return $map;
 }
 
 

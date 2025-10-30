@@ -2,18 +2,21 @@
 
 if ( ! function_exists( 'yc_sort_staff_manual' ) ) {
     function yc_sort_staff_manual( $staff, $company_id ) {
-        $manual = get_option( 'yc_staff_order', array() );
-        $map = ( isset( $manual[ $company_id ] ) && is_array( $manual[ $company_id ] ) ) ? $manual[ $company_id ] : array();
-        if ( empty( $map ) || ! is_array( $staff ) ) return $staff;
+        $order_map = yc_pa_get_manual_staff_order();
+        $key = (string) (int) $company_id;
+        $map = isset( $order_map[ $key ] ) && is_array( $order_map[ $key ] ) ? $order_map[ $key ] : array();
+        if ( empty( $map ) || ! is_array( $staff ) ) {
+            return $staff;
+        }
         usort( $staff, function( $a, $b ) use ( $map ) {
-            $ida = isset($a['id']) ? (int)$a['id'] : ( isset($a->id)? (int)$a->id : 0 );
-            $idb = isset($b['id']) ? (int)$b['id'] : ( isset($b->id)? (int)$b->id : 0 );
-            $wa = isset($map[$ida]) ? (int)$map[$ida] : 9999;
-            $wb = isset($map[$idb]) ? (int)$map[$idb] : 9999;
+            $ida = isset( $a['id'] ) ? (int) $a['id'] : ( isset( $a->id ) ? (int) $a->id : 0 );
+            $idb = isset( $b['id'] ) ? (int) $b['id'] : ( isset( $b->id ) ? (int) $b->id : 0 );
+            $wa  = isset( $map[ $ida ] ) ? (int) $map[ $ida ] : 9999;
+            $wb  = isset( $map[ $idb ] ) ? (int) $map[ $idb ] : 9999;
             if ( $wa === $wb ) {
-                $na = isset($a['name']) ? $a['name'] : ( isset($a->name)? $a->name : '' );
-                $nb = isset($b['name']) ? $b['name'] : ( isset($b->name)? $b->name : '' );
-                return strcasecmp( (string)$na, (string)$nb );
+                $na = isset( $a['name'] ) ? $a['name'] : ( isset( $a->name ) ? $a->name : '' );
+                $nb = isset( $b['name'] ) ? $b['name'] : ( isset( $b->name ) ? $b->name : '' );
+                return strcasecmp( (string) $na, (string) $nb );
             }
             return ( $wa < $wb ) ? -1 : 1;
         });
@@ -46,118 +49,247 @@ class YC_Shortcode {
   }
 
   private static function render_staff_grid($branches, $filter_branch, $filter_single, $filter_multi){
-    // Collect staff per category filters; global dedup by normalized name (handles cross-branch duplicates)
-    $list = array(); 
-    $by_name = array(); // key => staff array
+    $list = array();
+    $by_name = array();
     $use_filter = ($filter_single || !empty($filter_multi));
+    $manual_global = yc_pa_get_global_staff_order();
+    $priority_map  = yc_pa_parse_priority_map(get_option('yc_staff_admin_order_map', ''));
 
-    foreach($branches as $b){
-      $cid = intval($b['id']);
-      if ($filter_branch && $cid !== $filter_branch) continue;
+    $link_branches = $branches;
+    if ($filter_branch) {
+      $link_branches = array_filter($branches, static function($branch) use ($filter_branch) {
+        return isset($branch['id']) && (int) $branch['id'] === $filter_branch;
+      });
+      if (empty($link_branches)) {
+        $link_branches = $branches;
+      }
+    }
+
+    foreach ($branches as $branch) {
+      $cid = isset($branch['id']) ? (int) $branch['id'] : 0;
+      if ($cid <= 0) {
+        continue;
+      }
+      if ($filter_branch && $cid !== $filter_branch) {
+        continue;
+      }
 
       $staffIds = array();
-      if ($use_filter){
+      if ($use_filter) {
         $servicesMerged = array();
-        if ($filter_single){ $servicesMerged = array_merge($servicesMerged, YC_API::get_services($cid, $filter_single)); }
-        if (!empty($filter_multi)){ foreach($filter_multi as $catId){ $servicesMerged = array_merge($servicesMerged, YC_API::get_services($cid, $catId)); } }
-        $seenSvc = array();
-        foreach($servicesMerged as $svc){
-          $sid = isset($svc['id'])?intval($svc['id']):0;
-          if ($sid>0) $seenSvc[$sid]=$svc;
+        if ($filter_single) {
+          $servicesMerged = array_merge($servicesMerged, YC_API::get_services($cid, $filter_single));
         }
-        foreach($seenSvc as $svc){
-          if (!empty($svc['staff']) && is_array($svc['staff'])){
-            foreach($svc['staff'] as $st){
-              if (!is_array($st)) continue;
-              $sid = isset($st['id'])?intval($st['id']):0;
-              if ($sid>0) $staffIds[$sid]=true;
+        if (!empty($filter_multi)) {
+          foreach ($filter_multi as $catId) {
+            $servicesMerged = array_merge($servicesMerged, YC_API::get_services($cid, $catId));
+          }
+        }
+        $seenSvc = array();
+        foreach ($servicesMerged as $svc) {
+          $sid = isset($svc['id']) ? (int) $svc['id'] : 0;
+          if ($sid > 0) {
+            $seenSvc[$sid] = $svc;
+          }
+        }
+        foreach ($seenSvc as $svc) {
+          if (!empty($svc['staff']) && is_array($svc['staff'])) {
+            foreach ($svc['staff'] as $st) {
+              if (!is_array($st)) {
+                continue;
+              }
+              $sid = isset($st['id']) ? (int) $st['id'] : 0;
+              if ($sid > 0) {
+                $staffIds[$sid] = true;
+              }
             }
           }
         }
       } else {
         $allStaff = YC_API::get_staff($cid);
-        foreach($allStaff as $sid=>$st){ $staffIds[intval($sid)] = true; }
+        foreach ($allStaff as $sid => $st) {
+          $sid = (int) $sid;
+          if ($sid > 0) {
+            $staffIds[$sid] = true;
+          }
+        }
       }
 
-      if (empty($staffIds)) continue;
+      if (empty($staffIds)) {
+        continue;
+      }
+
       $staffMap = YC_API::get_staff($cid);
-      if (empty($staffMap)){
+      if (empty($staffMap)) {
         $servicesAll = YC_API::get_services($cid, null);
-        foreach($servicesAll as $svc){
-          if (!empty($svc['staff']) && is_array($svc['staff'])){
-            foreach($svc['staff'] as $st){
-              if (!is_array($st)) continue;
-              $sid = isset($st['id'])?intval($st['id']):0;
-              if ($sid<=0) continue;
-              if (!isset($staffMap[$sid])){
-                $staffMap[$sid]=array('id'=>$sid,'name'=>isset($st['name'])?$st['name']:'','image_url'=>isset($st['image_url'])?$st['image_url']:'','position'=>'');
-              }
+        foreach ($servicesAll as $svc) {
+          if (empty($svc['staff']) || !is_array($svc['staff'])) {
+            continue;
+          }
+          foreach ($svc['staff'] as $st) {
+            if (!is_array($st)) {
+              continue;
+            }
+            $sid = isset($st['id']) ? (int) $st['id'] : 0;
+            if ($sid <= 0) {
+              continue;
+            }
+            if (!isset($staffMap[$sid])) {
+              $staffMap[$sid] = array(
+                'id'        => $sid,
+                'name'      => isset($st['name']) ? $st['name'] : '',
+                'image_url' => isset($st['image_url']) ? $st['image_url'] : '',
+                'position'  => '',
+              );
             }
           }
         }
       }
 
-      foreach(array_keys($staffIds) as $sid){
-        $st = isset($staffMap[$sid]) ? $staffMap[$sid] : array('id'=>$sid);
-        if (!isset($st['name'])) $st['name']='';
-        if (!isset($st['image_url'])) $st['image_url']='';
+      foreach (array_keys($staffIds) as $sid) {
+        $sid = (int) $sid;
+        if ($sid <= 0) {
+          continue;
+        }
+        $st = isset($staffMap[$sid]) ? $staffMap[$sid] : array('id' => $sid);
+        if (!isset($st['name'])) {
+          $st['name'] = '';
+        }
+        if (!isset($st['image_url'])) {
+          $st['image_url'] = '';
+        }
         $pos = isset($st['position']) ? $st['position'] : '';
-        if (is_array($pos)) $pos = implode(', ', array_filter($pos));
+        if (is_array($pos)) {
+          $pos = implode(', ', array_filter($pos));
+        }
         $pos = yc_sanitize_position($pos);
         $nameKey = yc_normalize_name($st['name']);
-        if ($nameKey==='') continue;
+        if ($nameKey === '') {
+          continue;
+        }
 
-        if (isset($by_name[$nameKey])){
-          // Merge: prefer non-empty avatar/position
-          if (empty($by_name[$nameKey]['image_url']) && !empty($st['image_url'])) $by_name[$nameKey]['image_url'] = $st['image_url'];
-          if (empty($by_name[$nameKey]['position']) && !empty($pos)) $by_name[$nameKey]['position'] = $pos;
+        $manual_weight = isset($manual_global[$sid]) ? (int) $manual_global[$sid] : null;
+        $priority_weight = isset($priority_map[$nameKey]) ? (int) $priority_map[$nameKey] : null;
+
+        if (isset($by_name[$nameKey])) {
+          if (empty($by_name[$nameKey]['image_url']) && !empty($st['image_url'])) {
+            $by_name[$nameKey]['image_url'] = $st['image_url'];
+          }
+          if (empty($by_name[$nameKey]['position']) && !empty($pos)) {
+            $by_name[$nameKey]['position'] = $pos;
+          }
+          if ($by_name[$nameKey]['id'] <= 0 && $sid > 0) {
+            $by_name[$nameKey]['id'] = $sid;
+          }
+          if ($manual_weight !== null && ($by_name[$nameKey]['manual_order'] === null || $manual_weight < $by_name[$nameKey]['manual_order'])) {
+            $by_name[$nameKey]['manual_order'] = $manual_weight;
+          }
         } else {
           $by_name[$nameKey] = array(
-            'id'=>$sid,
-            'name'=>$st['name'],
-            'image_url'=>$st['image_url'],
-            'position'=>$pos,
+            'id'             => $sid,
+            'name'           => $st['name'],
+            'image_url'      => $st['image_url'],
+            'position'       => $pos,
+            'name_key'       => $nameKey,
+            'manual_order'   => $manual_weight,
+            'priority_order' => $priority_weight,
           );
         }
       }
     }
 
-    if (empty($by_name)) return '<div class="yc-price-empty">Нет специалистов по выбранным категориям.</div>';
-    // Transform to list and sort
-    $list = array_values($by_name);
-    if (empty($list)) return '<div class="yc-price-empty">Нет специалистов по выбранным категориям.</div>';
-    uasort($list, function($a,$b){ return strcasecmp(isset($a['name'])?$a['name']:'', isset($b['name'])?$b['name']:''); });
+    if (empty($by_name)) {
+      return '<div class="yc-price-empty">Нет специалистов по выбранным категориям.</div>';
+    }
 
-    ob_start(); ?>
-    <div class="yc-staff-grid-wrap">
-      <?php $yc_staff_t = esc_html( get_option('yc_title_staff', 'Специалисты') ); echo '<div class="yc-block-title">'.$yc_staff_t.'</div>'; ?>
-      <div class="yc-staff-grid" data-ycpa-version="1.6.20">
-        <?php foreach($list as $st):
-          $img = isset($st['image_url'])?$st['image_url']:'';
-          $name= isset($st['name'])?$st['name']:' ';
-          $pos = isset($st['position'])?yc_sanitize_position($st['position']):'';
-          // Choose any branch for link lookup; prefer first seen
-          $href = '';
-          if (!empty($branches)){
-            foreach($branches as $b){
-              $href = yc_get_staff_link(intval($b['id']), intval($st['id']));
-              if ($href) break;
-            }
-          }
-        ?>
-        <div class="yc-staff-card" data-order="<?php $___cid = isset($b['id']) ? intval($b['id']) : (isset($cid)?intval($cid):(isset($branches[0]['id'])?intval($branches[0]['id']):0)); $___sid = isset($st['id'])?intval($st['id']):0; echo isset($weights[$___cid][$___sid]) ? intval($weights[$___cid][$___sid]) : (is_numeric($pos)?intval($pos):0); ?>">
-          <a class="yc-staff-photo" <?php if($href): ?>href="<?php echo esc_url($href); ?>" target="_blank" rel="noopener nofollow"<?php endif; ?>>
-            <?php if($img): ?><img src="<?php echo esc_url($img); ?>" alt="" loading="lazy" /><?php else: ?><span class="yc-staff-ph" aria-hidden="true"></span><?php endif; ?>
-          </a>
-          <div class="yc-staff-meta">
-            <div class="yc-staff-name"><?php if($href){ echo '<a href="'.esc_url($href).'" target="_blank" rel="noopener nofollow">'.esc_html($name).'</a>'; } else { echo esc_html($name); } ?></div>
-            <?php if($pos): ?><div class="yc-staff-pos"><?php echo esc_html($pos); ?></div><?php endif; ?>
-          </div>
-        </div>
-        <?php endforeach; ?>
-      </div>
-    </div>
-    <?php
+    $list = array_values($by_name);
+    if (empty($list)) {
+      return '<div class="yc-price-empty">Нет специалистов по выбранным категориям.</div>';
+    }
+
+    usort($list, static function($a, $b) {
+      $pa = isset($a['priority_order']) && $a['priority_order'] !== null ? (int) $a['priority_order'] : PHP_INT_MAX;
+      $pb = isset($b['priority_order']) && $b['priority_order'] !== null ? (int) $b['priority_order'] : PHP_INT_MAX;
+      if ($pa !== $pb) {
+        return $pa <=> $pb;
+      }
+
+      $ma = isset($a['manual_order']) && $a['manual_order'] !== null ? (int) $a['manual_order'] : PHP_INT_MAX;
+      $mb = isset($b['manual_order']) && $b['manual_order'] !== null ? (int) $b['manual_order'] : PHP_INT_MAX;
+      if ($ma !== $mb) {
+        return $ma <=> $mb;
+      }
+
+      $na = isset($a['name']) ? (string) $a['name'] : '';
+      $nb = isset($b['name']) ? (string) $b['name'] : '';
+      return strcasecmp($na, $nb);
+    });
+
+    $title = esc_html(get_option('yc_title_staff', 'Специалисты'));
+    $version_attr = esc_attr(YC_PA_VER);
+
+    $render_link = static function($branches, $staff_id) {
+      foreach ($branches as $branch) {
+        $branch_id = isset($branch['id']) ? (int) $branch['id'] : 0;
+        if ($branch_id <= 0) {
+          continue;
+        }
+        $href = yc_get_staff_link($branch_id, (int) $staff_id);
+        if ($href) {
+          return $href;
+        }
+      }
+      return '';
+    };
+
+    ob_start();
+    echo '<div class="yc-staff-grid-wrap">';
+    echo '<div class="yc-block-title">' . $title . '</div>';
+    echo '<div class="yc-staff-grid" data-ycpa-version="' . $version_attr . '">';
+
+    foreach ($list as $staff) {
+      $name = isset($staff['name']) ? $staff['name'] : '';
+      $image = isset($staff['image_url']) ? $staff['image_url'] : '';
+      $position = isset($staff['position']) ? $staff['position'] : '';
+      $id = isset($staff['id']) ? (int) $staff['id'] : 0;
+      $href = $render_link($link_branches, $id);
+      $order_attr = isset($staff['priority_order']) && $staff['priority_order'] !== null
+        ? (int) $staff['priority_order']
+        : (isset($staff['manual_order']) && $staff['manual_order'] !== null ? (int) $staff['manual_order'] : 9999);
+
+      echo '<div class="yc-staff-card" data-order="' . esc_attr($order_attr) . '">';
+      if ($href) {
+        echo '<a class="yc-staff-photo" href="' . esc_url($href) . '" target="_blank" rel="noopener nofollow">';
+      } else {
+        echo '<span class="yc-staff-photo">';
+      }
+
+      if ($image) {
+        echo '<img src="' . esc_url($image) . '" alt="" loading="lazy" />';
+      } else {
+        echo '<span class="yc-staff-ph" aria-hidden="true"></span>';
+      }
+
+      if ($href) {
+        echo '</a>';
+      } else {
+        echo '</span>';
+      }
+
+      echo '<div class="yc-staff-meta">';
+      $name_html = esc_html($name);
+      if ($href) {
+        $name_html = '<a href="' . esc_url($href) . '" target="_blank" rel="noopener nofollow">' . $name_html . '</a>';
+      }
+      echo '<div class="yc-staff-name">' . $name_html . '</div>';
+      if ($position) {
+        echo '<div class="yc-staff-pos">' . esc_html($position) . '</div>';
+      }
+      echo '</div>';
+      echo '</div>';
+    }
+
+    echo '</div></div>';
     return ob_get_clean();
   }
 
