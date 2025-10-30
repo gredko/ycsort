@@ -2,12 +2,18 @@
 if (!defined('ABSPATH')) exit;
 
 class YC_Admin_Priority {
+    protected static $booted = false;
+
     public static function init() {
+        if (self::$booted) {
+            return;
+        }
+        self::$booted = true;
         add_action('admin_menu', [__CLASS__, 'menu']);
         add_action('admin_init', [__CLASS__, 'settings']);
     }
     public static function settings() {
-        register_setting('yc_staff_priority_group', 'yc_staff_admin_order_map', ['type'=>'string','sanitize_callback'=> 'wp_kses_post']);
+        register_setting('yc_staff_priority_group', 'yc_staff_admin_order_map', ['type'=>'string','sanitize_callback'=> 'sanitize_textarea_field']);
         add_settings_section('yc_staff_priority_section', '', '__return_false', 'yc_staff_priority');
         add_settings_field('yc_staff_admin_order_map', __('Порядок специалистов (Имя=число)','ycpa'), [__CLASS__,'field_order'], 'yc_staff_priority', 'yc_staff_priority_section');
     }
@@ -28,4 +34,3 @@ class YC_Admin_Priority {
         echo '</form></div>';
     }
 }
-YC_Admin_Priority::init();

@@ -33,60 +33,51 @@ class YC_Admin {
   }
 
   public static function settings(){
-        // Register manual staff order option
-        register_setting(
-            'yc_price_group',
-            'yc_staff_order',
-            array(
-                'type'              => 'array',
-                'sanitize_callback' => array(__CLASS__, 'sanitize_staff_order'),
-                'default'           => array(),
-            )
-        );
-    
-    register_setting('yc_price_group', self::OPTION_BRANCHES, array('type'=>'array','sanitize_callback'=>[__CLASS__,'sanitize_branches'],'default'=>array()));
-    register_setting('yc_price_group', self::OPTION_CACHE_TTL, array('type'=>'integer','sanitize_callback'=>[__CLASS__,'sanitize_int_nonneg'],'default'=>15));
-    register_setting('yc_price_group', self::OPTION_DEBUG, array('type'=>'boolean','sanitize_callback'=>[__CLASS__,'sanitize_bool'],'default'=>0));
-    register_setting('yc_price_group', self::OPTION_PARTNER, array('type'=>'string','sanitize_callback'=>'sanitize_text_field','default'=>''));
-    register_setting('yc_price_group', self::OPTION_USER, array('type'=>'string','sanitize_callback'=>'sanitize_text_field','default'=>''));
+    register_setting(
+      'yc_price_group',
+      'yc_staff_order',
+      array(
+        'type'              => 'array',
+        'sanitize_callback' => array(__CLASS__, 'sanitize_staff_order'),
+        'default'           => array(),
+      )
+    );
 
-    register_setting('yc_price_group', self::OPTION_MULTI_CATEGORIES, array('type'=>'boolean','sanitize_callback'=>[__CLASS__,'sanitize_bool'],'default'=>0));
-    register_setting('yc_price_group', self::OPTION_SHOW_STAFF, array('type'=>'boolean','sanitize_callback'=>[__CLASS__,'sanitize_bool'],'default'=>1));
+    register_setting('yc_price_group', self::OPTION_BRANCHES, array('type' => 'array',   'sanitize_callback' => [__CLASS__, 'sanitize_branches'],   'default' => array()));
+    register_setting('yc_price_group', self::OPTION_CACHE_TTL, array('type' => 'integer','sanitize_callback' => [__CLASS__, 'sanitize_int_nonneg'],'default' => 15));
+    register_setting('yc_price_group', self::OPTION_DEBUG,     array('type' => 'boolean','sanitize_callback' => [__CLASS__, 'sanitize_bool'],      'default' => 0));
+    register_setting('yc_price_group', self::OPTION_PARTNER,   array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field',            'default' => ''));
+    register_setting('yc_price_group', self::OPTION_USER,      array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field',            'default' => ''));
 
-    register_setting('yc_price_group', self::OPTION_BOOK_URL_TPL, array('type'=>'string','sanitize_callback'=>'esc_url_raw','default'=>''));
-    register_setting('yc_price_group', self::OPTION_BOOK_STEP, array('type'=>'string','sanitize_callback'=>[__CLASS__,'sanitize_book_step'],'default'=>'select-master'));
+    register_setting('yc_price_group', self::OPTION_MULTI_CATEGORIES, array('type' => 'boolean', 'sanitize_callback' => [__CLASS__, 'sanitize_bool'], 'default' => 0));
+    register_setting('yc_price_group', self::OPTION_SHOW_STAFF,        array('type' => 'boolean', 'sanitize_callback' => [__CLASS__, 'sanitize_bool'], 'default' => 1));
 
-    register_setting('yc_price_group', self::OPTION_UTM_SOURCE, array('type'=>'string','sanitize_callback'=>'sanitize_text_field','default'=>'site'));
-    register_setting('yc_price_group', self::OPTION_UTM_MEDIUM, array('type'=>'string','sanitize_callback'=>'sanitize_text_field','default'=>'price'));
-    register_setting('yc_price_group', self::OPTION_UTM_CAMPAIGN, array('type'=>'string','sanitize_callback'=>'sanitize_text_field','default'=>'booking'));
+    register_setting('yc_price_group', self::OPTION_BOOK_URL_TPL, array('type' => 'string', 'sanitize_callback' => 'esc_url_raw',                  'default' => ''));
+    register_setting('yc_price_group', self::OPTION_BOOK_STEP,    array('type' => 'string', 'sanitize_callback' => [__CLASS__, 'sanitize_book_step'],'default' => 'select-master'));
 
-    register_setting('yc_price_group', self::OPTION_VLIST_PAGE, array('type'=>'integer','sanitize_callback'=>[__CLASS__,'sanitize_int_nonneg'],'default'=>15));
+    register_setting('yc_price_group', self::OPTION_UTM_SOURCE,   array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field',          'default' => 'site'));
+    register_setting('yc_price_group', self::OPTION_UTM_MEDIUM,   array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field',          'default' => 'price'));
+    register_setting('yc_price_group', self::OPTION_UTM_CAMPAIGN, array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field',          'default' => 'booking'));
 
-    register_setting('yc_price_group', self::OPTION_STAFF_LINKS,
-    array('type'=>'array','sanitize_callback'=>[__CLASS__,'sanitize_staff_links'],'default'=>array()));
-    register_setting('yc_price_group', 'yc_staff_weights', array('type'=>'array','sanitize_callback'=>[__CLASS__,'sanitize_staff_weights'],'default'=>array()));
-    // duplicate line kept for context array('type'=>'array','sanitize_callback'=>[__CLASS__,'sanitize_staff_links'],'default'=>array()));
+    register_setting('yc_price_group', self::OPTION_VLIST_PAGE, array('type' => 'integer','sanitize_callback' => [__CLASS__, 'sanitize_int_nonneg'],'default' => 15));
+    register_setting('yc_price_group', self::OPTION_STAFF_LINKS, array('type' => 'array',  'sanitize_callback' => [__CLASS__, 'sanitize_staff_links'],'default' => array()));
+    register_setting('yc_price_group', self::OPTION_TITLE_STAFF, array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field',           'default' => 'Специалисты'));
+    register_setting('yc_price_group', self::OPTION_TITLE_PRICE, array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field',           'default' => 'Прайс - лист'));
 
-    register_setting('yc_price_group', self::OPTION_TITLE_STAFF, array('type'=>'string','sanitize_callback'=>'sanitize_text_field','default'=>'Специалисты'));
-    register_setting('yc_price_group', self::OPTION_TITLE_PRICE, array('type'=>'string','sanitize_callback'=>'sanitize_text_field','default'=>'Прайс - лист'));
+    add_settings_section('yc_price_section', 'Настройки YClients', '__return_false', 'yc-price-settings');
+    add_settings_field(self::OPTION_BRANCHES,        'Филиалы',                      [__CLASS__, 'field_branches'],        'yc-price-settings', 'yc_price_section');
+    add_settings_field(self::OPTION_CACHE_TTL,       'Кэш, минут',                   [__CLASS__, 'field_cache_ttl'],       'yc-price-settings', 'yc_price_section');
+    add_settings_field(self::OPTION_DEBUG,           'Временный debug',              [__CLASS__, 'field_debug'],           'yc-price-settings', 'yc_price_section');
+    add_settings_field(self::OPTION_MULTI_CATEGORIES,'Фильтр по нескольким категориям',[__CLASS__, 'field_multi_categories'],'yc-price-settings', 'yc_price_section');
+    add_settings_field(self::OPTION_SHOW_STAFF,      'Показывать блок «Специалисты»',[__CLASS__, 'field_show_staff'],      'yc-price-settings', 'yc_price_section');
+    add_settings_field('yc_titles',                  'Заголовки блоков',             [__CLASS__, 'field_titles'],         'yc-price-settings', 'yc_price_section');
+    add_settings_field(self::OPTION_BOOK_URL_TPL,    'Шаблон URL записи',            [__CLASS__, 'field_book_url'],       'yc-price-settings', 'yc_price_section');
+    add_settings_field(self::OPTION_BOOK_STEP,       'Шаг на YClients',              [__CLASS__, 'field_book_step'],      'yc-price-settings', 'yc_price_section');
+    add_settings_field(self::OPTION_UTM_SOURCE,      'UTM source/medium/campaign',   [__CLASS__, 'field_utms'],           'yc-price-settings', 'yc_price_section');
+    add_settings_field(self::OPTION_VLIST_PAGE,      'Ленивая подгрузка — порция',   [__CLASS__, 'field_vlist'],          'yc-price-settings', 'yc_price_section');
 
-    add_settings_section('yc_price_section','Настройки YClients','__return_false','yc-price-settings');
-    add_settings_field(self::OPTION_BRANCHES,'Филиалы',[__CLASS__,'field_branches'],'yc-price-settings','yc_price_section');
-    add_settings_field(self::OPTION_CACHE_TTL,'Кэш, минут',[__CLASS__,'field_cache_ttl'],'yc-price-settings','yc_price_section');
-    add_settings_field(self::OPTION_DEBUG,'Временный debug',[__CLASS__,'field_debug'],'yc-price-settings','yc_price_section');
-
-    add_settings_field(self::OPTION_MULTI_CATEGORIES,'Фильтр по нескольким категориям',[__CLASS__,'field_multi_categories'],'yc-price-settings','yc_price_section');
-    add_settings_field(self::OPTION_SHOW_STAFF,'Показывать блок «Специалисты»',[__CLASS__,'field_show_staff'],'yc-price-settings','yc_price_section');
-    add_settings_field('yc_titles','Заголовки блоков',[__CLASS__,'field_titles'],'yc-price-settings','yc_price_section');
-
-    add_settings_field(self::OPTION_BOOK_URL_TPL,'Шаблон URL записи',[__CLASS__,'field_book_url'],'yc-price-settings','yc_price_section');
-    add_settings_field(self::OPTION_BOOK_STEP,'Шаг на YClients',[__CLASS__,'field_book_step'],'yc-price-settings','yc_price_section');
-
-    add_settings_field(self::OPTION_UTM_SOURCE,'UTM source/medium/campaign',[__CLASS__,'field_utms'],'yc-price-settings','yc_price_section');
-    add_settings_field(self::OPTION_VLIST_PAGE,'Ленивая подгрузка — порция',[__CLASS__,'field_vlist'],'yc-price-settings','yc_price_section');
-
-    add_settings_section('yc_staff_section','Ссылки на страницы специалистов','__return_false','yc-price-settings');
-    add_settings_field(self::OPTION_STAFF_LINKS,'Специалисты по филиалам',[__CLASS__,'field_staff_links'],'yc-price-settings','yc_staff_section');
+    add_settings_section('yc_staff_section', 'Ссылки на страницы специалистов', '__return_false', 'yc-price-settings');
+    add_settings_field(self::OPTION_STAFF_LINKS, 'Специалисты по филиалам', [__CLASS__, 'field_staff_links'], 'yc-price-settings', 'yc_staff_section');
   }
 
   public static function sanitize_book_step($v){ $v=strtolower(trim((string)$v)); return in_array($v,array('select-services','select-master'),true)?$v:'select-master'; }
@@ -188,14 +179,21 @@ class YC_Admin {
     echo '<p class="description">Можно указать только домен (например, https://n1295696.yclients.com/). Плейсхолдеры: {company_id}, {service_id}, {book_step}, {utm_*}.</p>';
   }
 
-  public static function field_book_step(){ $val=get_option(self::OPTION_BOOK_STEP,'select-master'); ?>
+  public static function field_book_step(){
+    $val = get_option(self::OPTION_BOOK_STEP, 'select-master');
+    ?>
     <fieldset>
-      <label><input type="radio" name="<?php echo esc_attr(self::OPTION_BOOK_STEP); ?>" value="select-master" <?php checked('select-master',$val); ?> /> Сразу выбор мастера</label><br/>
-      <label><input type="radio" name="<?php echo esc_attr(self::OPTION_BOOK_STEP); ?>" value="select-services" <?php checked('select-services',$val); 
-add_action( 'admin_init', array( 'YC_Admin', 'settings' ) );
-?> /> Сначала выбор услуги</label>
+      <label>
+        <input type="radio" name="<?php echo esc_attr(self::OPTION_BOOK_STEP); ?>" value="select-master" <?php checked('select-master', $val); ?> />
+        Сразу выбор мастера
+      </label><br/>
+      <label>
+        <input type="radio" name="<?php echo esc_attr(self::OPTION_BOOK_STEP); ?>" value="select-services" <?php checked('select-services', $val); ?> />
+        Сначала выбор услуги
+      </label>
     </fieldset>
-  <?php }
+    <?php
+  }
 
   public static function field_utms(){
     $s=esc_attr(get_option(self::OPTION_UTM_SOURCE,'site'));
@@ -213,61 +211,88 @@ add_action( 'admin_init', array( 'YC_Admin', 'settings' ) );
   }
 
   public static function field_staff_links(){
-    $branches=get_option(self::OPTION_BRANCHES,array());
-    $map=get_option(self::OPTION_STAFF_LINKS,array());
-    if (!is_array($branches) || empty($branches)){
+    $branches = get_option(self::OPTION_BRANCHES, array());
+    $map      = get_option(self::OPTION_STAFF_LINKS, array());
+
+    if (!is_array($branches) || empty($branches)) {
       echo '<p class="description">Сначала добавьте филиалы выше.</p>';
       return;
     }
+
+    if (!is_array($map)) {
+      $map = array();
+    }
+
+    $order_map = yc_pa_get_manual_staff_order();
+
     echo '<div class="yc-admin-card">';
     echo '<p class="description">Укажите ссылки на страницы специалистов на сайте. Список подгружается из YClients (по API).</p>';
-    foreach($branches as $b){
-      $cid=isset($b['id'])?intval($b['id']):0;
-      $title=isset($b['title'])?esc_html($b['title']):'Филиал';
-      if ($cid<=0) continue;
-      if (!class_exists('YC_API')) { echo '<p>API недоступно.</p>'; continue; }
+
+    foreach ($branches as $branch) {
+      $cid   = isset($branch['id']) ? (int) $branch['id'] : 0;
+      $title = isset($branch['title']) ? esc_html($branch['title']) : 'Филиал';
+      if ($cid <= 0) {
+        continue;
+      }
+      if (!class_exists('YC_API')) {
+        echo '<p>API недоступно.</p>';
+        continue;
+      }
       $staffs = YC_API::get_staff($cid);
-      echo '<h3 style="margin-top:12px;">'.$title.'</h3>';
-      if (empty($staffs)){ echo '<p>Не удалось получить список специалистов.</p>'; continue; }
+      echo '<h3 style="margin-top:12px;">' . $title . '</h3>';
+      if (empty($staffs)) {
+        echo '<p>Не удалось получить список специалистов.</p>';
+        continue;
+      }
+
       echo '<table class="widefat striped"><thead><tr><th style="width:60px;">ID</th><th>Имя</th><th>Должность</th><th>Ссылка</th></tr></thead><tbody>';
-      foreach($staffs as $st){
-        $sid=intval($st['id']);
-        $name=isset($st['name'])?esc_html($st['name']):'';
-        $pos =isset($st['position'])?(is_array($st['position'])?esc_html(implode(', ', array_filter($st['position']))):esc_html($st['position'])):'';
-        $val=isset($map[$cid][$sid])?esc_attr($map[$cid][$sid]):'';
-        echo '<tr><td>'.$sid.'</td><td>'.$name.'</td><td>'.$pos.'</td>';
-        echo '<td><input type="text" class="regular-text" name="'.esc_attr(self::OPTION_STAFF_LINKS).'['.$cid.']['.$sid.']" value="'.$val.'" placeholder="https://example.com/staff/..."></td>'; echo '</tr>';
+      foreach ($staffs as $staff) {
+        $sid  = isset($staff['id']) ? (int) $staff['id'] : 0;
+        $name = isset($staff['name']) ? esc_html($staff['name']) : '';
+        $pos  = '';
+        if (isset($staff['position'])) {
+          if (is_array($staff['position'])) {
+            $pos = esc_html(implode(', ', array_filter($staff['position'])));
+          } else {
+            $pos = esc_html($staff['position']);
+          }
+        }
+        $val = isset($map[$cid][$sid]) ? esc_attr($map[$cid][$sid]) : '';
+        echo '<tr><td>' . $sid . '</td><td>' . $name . '</td><td>' . $pos . '</td>';
+        echo '<td><input type="text" class="regular-text" name="' . esc_attr(self::OPTION_STAFF_LINKS) . '[' . $cid . '][' . $sid . ']" value="' . $val . '" placeholder="https://example.com/staff/..." /></td></tr>';
       }
       echo '</tbody></table>';
     }
     echo '</div>';
-  
-        // Manual order block
-        $order = get_option( 'yc_staff_order', array() );
-        echo '<div id="yc_manual_order_block" class="yc-admin-card">';
-        echo '<h3 style="margin-top:16px;">' . esc_html__( 'Ручной порядок специалистов', 'yc-price-accordion' ) . '</h3>';
-        echo '<p class="description">Для каждого филиала укажите порядок. Формат: <code>id1,id2,id3</code> (id1=первый) или c весами: <code>id1=1,id2=5</code>. Неуказанные — в конце.</p>';
-        $branches = get_option( 'yc_branches', array() );
-        if ( ! is_array( $branches ) ) { $branches = array(); }
-        foreach ( $branches as $b ) {
-            if ( empty( $b['id'] ) ) { continue; }
-            $cid   = (int) $b['id'];
-            $title = ! empty( $b['title'] ) ? esc_html( $b['title'] ) : ( 'Company ' . $cid );
-            $preset = '';
-            if ( isset( $order[ $cid ] ) && is_array( $order[ $cid ] ) ) {
-                $pairs = $order[ $cid ];
-                asort( $pairs, SORT_NUMERIC );
-                $buf = array();
-                foreach ( $pairs as $sid => $w ) {
-                    $buf[] = (int) $sid . '=' . (int) $w;
-                }
-                $preset = implode( ', ', $buf );
-            }
-            echo '<h4 style="margin:10px 0 6px;">' . $title . ' (ID ' . $cid . ')</h4>';
-            echo '<textarea name="yc_staff_order[' . $cid . ']" rows="3" style="width:100%;font-family:monospace;">' . esc_textarea( $preset ) . '</textarea>';
+
+    echo '<div id="yc_manual_order_block" class="yc-admin-card">';
+    echo '<h3 style="margin-top:16px;">' . esc_html__('Ручной порядок специалистов', 'yc-price-accordion') . '</h3>';
+    echo '<p class="description">Для каждого филиала укажите порядок. Формат: <code>id1,id2,id3</code> (id1 — первый) или с весами: <code>id1=1,id2=5</code>. Неуказанные окажутся в конце.</p>';
+
+    foreach ($branches as $branch) {
+      if (empty($branch['id'])) {
+        continue;
+      }
+      $cid   = (int) $branch['id'];
+      $label = !empty($branch['title']) ? esc_html($branch['title']) : ('Company ' . $cid);
+      $preset = '';
+      $key = (string) $cid;
+      if (isset($order_map[$key]) && is_array($order_map[$key])) {
+        $pairs = $order_map[$key];
+        asort($pairs, SORT_NUMERIC);
+        $buf = array();
+        foreach ($pairs as $sid => $weight) {
+          $buf[] = (int) $sid . '=' . (int) $weight;
         }
-        echo '</div>';
-}
+        $preset = implode(', ', $buf);
+      }
+
+      echo '<h4 style="margin:10px 0 6px;">' . $label . ' (ID ' . $cid . ')</h4>';
+      echo '<textarea name="yc_staff_order[' . $cid . ']" rows="3" style="width:100%;font-family:monospace;">' . esc_textarea($preset) . '</textarea>';
+    }
+
+    echo '</div>';
+  }
 
   public static function render_page(){
     echo '<div class="wrap"><h1 style="margin-bottom:12px;">Настройки YClients</h1><div class="yc-admin-card"><form method="post" action="options.php">';
@@ -296,31 +321,48 @@ add_action( 'admin_init', array( 'YC_Admin', 'settings' ) );
             return $out;
         }
         foreach ( $input as $company_key => $raw ) {
-            $cid = preg_replace( '/\D+/', '', (string) $company_key );
-            if ( $cid === '' ) { $cid = $company_key; }
+            $cid_raw = preg_replace( '/\D+/', '', (string) $company_key );
+            $cid = $cid_raw !== '' ? (string) (int) $cid_raw : trim( (string) $company_key );
+            if ( $cid === '' ) {
+                continue;
+            }
             $text = is_array( $raw ) ? '' : trim( (string) $raw );
-            if ( $text === '' ) { continue; }
+            if ( $text === '' ) {
+                continue;
+            }
             $pairs = preg_split( '/[,\r\n]+/', $text );
             $rank  = 1;
             foreach ( $pairs as $token ) {
                 $token = trim( $token );
-                if ( $token === '' ) { continue; }
+                if ( $token === '' ) {
+                    continue;
+                }
                 if ( strpos( $token, '=' ) !== false ) {
                     list( $sid, $w ) = array_map( 'trim', explode( '=', $token, 2 ) );
                     $sid = preg_replace( '/\D+/', '', $sid );
-                    $w = (int) $w;
-                    if ( $w <= 0 ) { $w = $rank; }
-                    if ( $sid !== '' ) {
-                        if ( ! isset( $out[ $cid ] ) ) { $out[ $cid ] = array(); }
-                        $out[ $cid ][ $sid ] = $w;
-                        $rank = max( $rank, $w + 1 );
+                    $sid = $sid !== '' ? (int) $sid : 0;
+                    $w   = (int) $w;
+                    if ( $sid <= 0 ) {
+                        continue;
                     }
+                    if ( $w <= 0 ) {
+                        $w = $rank;
+                    }
+                    if ( ! isset( $out[ $cid ] ) ) {
+                        $out[ $cid ] = array();
+                    }
+                    $out[ $cid ][ $sid ] = $w;
+                    $rank = max( $rank, $w + 1 );
                 } else {
                     $sid = preg_replace( '/\D+/', '', $token );
-                    if ( $sid !== '' ) {
-                        if ( ! isset( $out[ $cid ] ) ) { $out[ $cid ] = array(); }
-                        $out[ $cid ][ $sid ] = $rank++;
+                    $sid = $sid !== '' ? (int) $sid : 0;
+                    if ( $sid <= 0 ) {
+                        continue;
                     }
+                    if ( ! isset( $out[ $cid ] ) ) {
+                        $out[ $cid ] = array();
+                    }
+                    $out[ $cid ][ $sid ] = $rank++;
                 }
             }
         }
