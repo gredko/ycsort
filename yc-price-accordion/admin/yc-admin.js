@@ -85,6 +85,7 @@ jQuery(function($){
       throw new Error(json.error);
     }
     return json;
+    return await resp.json();
   }
 
   async function syncBranch(branch, index, total){
