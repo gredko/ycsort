@@ -160,13 +160,32 @@ class YC_Repository {
                 continue;
             }
             $ids[] = $cat_id;
+            $title = '';
+            if (isset($category['title'])) {
+                $title = (string) $category['title'];
+            } elseif (isset($category['name'])) {
+                $title = (string) $category['name'];
+            }
+            $title = wp_strip_all_tags($title);
+
+            $sort_order = 0;
+            if (isset($category['sort_order'])) {
+                $sort_order = (int) $category['sort_order'];
+            } elseif (isset($category['sortOrder'])) {
+                $sort_order = (int) $category['sortOrder'];
+            } elseif (isset($category['weight'])) {
+                $sort_order = (int) $category['weight'];
+            } elseif (isset($category['order'])) {
+                $sort_order = (int) $category['order'];
+            }
+
             $data = array(
                 'company_id'  => $company_id,
                 'category_id' => $cat_id,
                 'parent_id'   => isset($category['parent_id']) ? (int) $category['parent_id'] : (isset($category['parentId']) ? (int) $category['parentId'] : 0),
-                'title'       => isset($category['title']) ? (string) $category['title'] : (isset($category['name']) ? (string) $category['name'] : ''),
+                'title'       => $title,
                 'raw_data'    => wp_json_encode($category),
-                'sort_order'  => isset($category['sort_order']) ? (int) $category['sort_order'] : 0,
+                'sort_order'  => $sort_order,
                 'updated_at'  => $now,
             );
             $wpdb->replace($table, $data, array('%d', '%d', '%d', '%s', '%s', '%d', '%s'));
@@ -692,12 +711,32 @@ class YC_Repository {
                 $title = isset($row['title']) ? (string) $row['title'] : '';
                 if ($title === '' && !empty($row['raw_data'])) {
                     $raw = json_decode($row['raw_data'], true);
-                    if (isset($raw['title'])) {
-                        $title = (string) $raw['title'];
-                    } elseif (isset($raw['name'])) {
-                        $title = (string) $raw['name'];
+                    if (is_array($raw)) {
+                        $candidates = array('title', 'name', 'label', 'title_full', 'category_title', 'categoryTitle', 'categoryName', 'group', 'group_name', 'group_title');
+                        foreach ($candidates as $candidate) {
+                            if (!empty($raw[$candidate])) {
+                                $title = (string) $raw[$candidate];
+                                break;
+                            }
+                        }
+                        if ($title === '' && isset($raw['category']) && is_array($raw['category'])) {
+                            foreach ($candidates as $candidate) {
+                                if (!empty($raw['category'][$candidate])) {
+                                    $title = (string) $raw['category'][$candidate];
+                                    break;
+                                }
+                            }
+                            if ($title === '') {
+                                if (isset($raw['category']['title'])) {
+                                    $title = (string) $raw['category']['title'];
+                                } elseif (isset($raw['category']['name'])) {
+                                    $title = (string) $raw['category']['name'];
+                                }
+                            }
+                        }
                     }
                 }
+                $title = wp_strip_all_tags($title);
                 $map[$cid] = $title;
             }
         }
