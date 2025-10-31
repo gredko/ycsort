@@ -803,6 +803,9 @@ class YC_Repository {
                 'price_min'   => isset($row['price_min']) ? (float) $row['price_min'] : 0,
                 'price_max'   => isset($row['price_max']) ? (float) $row['price_max'] : 0,
                 'duration'    => isset($row['duration']) ? (int) $row['duration'] : 0,
+                'sort_order'  => isset($row['sort_order']) ? (int) $row['sort_order'] : 0,
+                'is_active'   => isset($row['is_active']) ? (int) $row['is_active'] : 1,
+                'updated_at'  => isset($row['updated_at']) ? $row['updated_at'] : '',
                 'category_id' => isset($row['category_id']) ? (int) $row['category_id'] : 0,
                 'category'    => array(
                     'id'    => isset($row['category_id']) ? (int) $row['category_id'] : 0,
