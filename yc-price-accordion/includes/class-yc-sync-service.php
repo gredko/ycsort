@@ -60,7 +60,7 @@ class YC_Sync_Service {
         }
 
         if ($result['categories'] || $result['services'] || $result['staff']) {
-            update_option(YC_Admin::OPTION_LAST_SYNC, time(), false);
+            update_option('yc_pa_last_sync', time(), false);
         }
 
         return $result;

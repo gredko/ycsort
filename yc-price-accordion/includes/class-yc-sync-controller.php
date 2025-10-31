@@ -42,7 +42,7 @@ class YC_Sync_Controller {
 
     public static function get_status() : WP_REST_Response {
         $branches = yc_get_branches();
-        $last_sync = (int) get_option(YC_Admin::OPTION_LAST_SYNC, 0);
+        $last_sync = (int) get_option('yc_pa_last_sync', 0);
         return new WP_REST_Response(array(
             'branches'  => $branches,
             'last_sync' => $last_sync,
