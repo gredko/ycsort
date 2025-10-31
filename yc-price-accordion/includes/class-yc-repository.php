@@ -426,6 +426,9 @@ class YC_Repository {
         if (!isset($option['ids']) || !is_array($option['ids'])) {
             $option['ids'] = array();
         }
+
+        $before = count($option['ids']);
+
         foreach ($service_ids as $id) {
             $sid = (int) $id;
             if ($sid <= 0) {
@@ -433,11 +436,17 @@ class YC_Repository {
             }
             $option['ids'][$sid] = true;
         }
-        $option['processed'] = count($option['ids']);
+
+        $after = count($option['ids']);
+        $delta = max(0, $after - $before);
+
+        $option['processed'] = $after;
         update_option(self::service_sync_option($company_id), $option, false);
+
         return array(
-            'processed' => $option['processed'],
-            'total'     => isset($option['total']) ? $option['total'] : null,
+            'processed'        => $option['processed'],
+            'processed_delta'  => $delta,
+            'total'            => isset($option['total']) ? $option['total'] : null,
         );
     }
 
@@ -567,6 +576,7 @@ class YC_Repository {
         self::store_service_relations_partial($company_id, $relations, $reset_relations);
 
         $state = self::append_service_sync_ids($company_id, $ids);
+        $processed_delta = isset($state['processed_delta']) ? (int) $state['processed_delta'] : count($ids);
 
         $relation_count = 0;
         foreach ($relations as $staff_map) {
@@ -576,7 +586,7 @@ class YC_Repository {
         }
 
         return array(
-            'processed' => count($ids),
+            'processed' => $processed_delta,
             'relations' => $relation_count,
             'state'     => $state,
         );
