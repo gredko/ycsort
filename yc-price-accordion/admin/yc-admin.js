@@ -80,6 +80,11 @@ jQuery(function($){
     if (!resp.ok){
       throw new Error('HTTP ' + resp.status);
     }
+    const json = await resp.json();
+    if (json && json.error){
+      throw new Error(json.error);
+    }
+    return json;
     return await resp.json();
   }
 
