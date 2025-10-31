@@ -50,6 +50,9 @@ final class YC_Price_Accordion_Pro {
             wp_die(__('YClients Price Accordion требует PHP 7.2 или выше.', 'yc-price-accordion'));
         }
 
+        require_once YC_PA_DIR . 'includes/class-yc-repository.php';
+        YC_Repository::install();
+
         if (!wp_next_scheduled('yc_pa_cron_prewarm')) {
             wp_schedule_event(time() + 120, 'ten_minutes', 'yc_pa_cron_prewarm');
         }
@@ -64,8 +67,11 @@ final class YC_Price_Accordion_Pro {
 
     public static function load_dependencies() : void {
         require_once YC_PA_DIR . 'includes/helpers.php';
-        require_once YC_PA_DIR . 'includes/class-yc-storage.php';
+        require_once YC_PA_DIR . 'includes/class-yc-repository.php';
+        require_once YC_PA_DIR . 'includes/class-yc-media.php';
+        require_once YC_PA_DIR . 'includes/class-yc-sync-service.php';
         require_once YC_PA_DIR . 'includes/class-yc-api.php';
+        require_once YC_PA_DIR . 'includes/class-yc-sync-controller.php';
         require_once YC_PA_DIR . 'public/class-yc-shortcode.php';
 
         if (is_admin()) {
@@ -75,6 +81,14 @@ final class YC_Price_Accordion_Pro {
     }
 
     public static function init_components() : void {
+        if (class_exists('YC_Repository')) {
+            YC_Repository::init();
+        }
+
+        if (class_exists('YC_Sync_Controller')) {
+            YC_Sync_Controller::init();
+        }
+
         if (class_exists('YC_Admin')) {
             YC_Admin::init();
         }
@@ -104,9 +118,8 @@ final class YC_Price_Accordion_Pro {
             if ($company_id <= 0) {
                 continue;
             }
-            YC_API::sync_company($company_id, false);
+            YC_Sync_Service::sync_company($company_id, array('download_photos' => false));
         }
-        update_option('yc_pa_last_sync', time(), false);
     }
 }
 
