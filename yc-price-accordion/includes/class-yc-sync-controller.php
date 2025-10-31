@@ -11,14 +11,21 @@ class YC_Sync_Controller {
     }
 
     public static function register_routes() : void {
+        $readable = 'GET';
+        $creatable = 'POST';
+        if (class_exists('WP_REST_Server')) {
+            $readable = WP_REST_Server::READABLE;
+            $creatable = WP_REST_Server::CREATABLE;
+        }
+
         register_rest_route(self::ROUTE_NAMESPACE, '/sync', array(
             array(
-                'methods'             => WP_REST_Server::READABLE,
+                'methods'             => $readable,
                 'callback'            => [__CLASS__, 'get_status'],
                 'permission_callback' => [__CLASS__, 'check_permissions'],
             ),
             array(
-                'methods'             => WP_REST_Server::CREATABLE,
+                'methods'             => $creatable,
                 'callback'            => [__CLASS__, 'handle_sync'],
                 'permission_callback' => [__CLASS__, 'check_permissions'],
                 'args'                => array(
@@ -41,8 +48,21 @@ class YC_Sync_Controller {
     }
 
     public static function get_status() : WP_REST_Response {
-        $branches = yc_get_branches();
+        try {
+            $branches = function_exists('yc_get_branches') ? yc_get_branches() : get_option('yc_branches', array());
+            if (!is_array($branches)) {
+                $branches = array();
+            }
+        } catch (Throwable $e) {
+            return new WP_REST_Response(array(
+                'branches'  => array(),
+                'last_sync' => (int) get_option('yc_pa_last_sync', 0),
+                'error'     => $e->getMessage(),
+            ), 500);
+        }
+
         $last_sync = (int) get_option('yc_pa_last_sync', 0);
+
         return new WP_REST_Response(array(
             'branches'  => $branches,
             'last_sync' => $last_sync,
@@ -50,22 +70,30 @@ class YC_Sync_Controller {
     }
 
     public static function handle_sync(WP_REST_Request $request) {
-        $mode = $request->get_param('mode');
-        if ($mode === 'plan') {
-            return self::get_status();
+        try {
+            $mode = $request->get_param('mode');
+            if ($mode === 'plan') {
+                return self::get_status();
+            }
+
+            $company_id = (int) $request->get_param('company_id');
+            if ($company_id <= 0) {
+                return new WP_Error('yc_pa_invalid_company', __('Некорректный идентификатор филиала', 'yc-price-accordion'), array('status' => 400));
+            }
+
+            $args = $request->get_json_params();
+            if (!is_array($args)) {
+                $args = array();
+            }
+
+            $result = YC_Sync_Service::sync_company($company_id, $args);
+
+            return new WP_REST_Response(array(
+                'company_id' => $company_id,
+                'result'     => $result,
+            ));
+        } catch (Throwable $e) {
+            return new WP_Error('yc_pa_sync_exception', $e->getMessage(), array('status' => 500));
         }
-        $company_id = (int) $request->get_param('company_id');
-        if ($company_id <= 0) {
-            return new WP_Error('yc_pa_invalid_company', __('Некорректный идентификатор филиала', 'yc-price-accordion'), array('status' => 400));
-        }
-        $args = $request->get_json_params();
-        if (!is_array($args)) {
-            $args = array();
-        }
-        $result = YC_Sync_Service::sync_company($company_id, $args);
-        return new WP_REST_Response(array(
-            'company_id' => $company_id,
-            'result'     => $result,
-        ));
     }
 }
