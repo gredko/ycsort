@@ -118,6 +118,7 @@ class YC_Admin {
                     <nav class="yc-tabs-nav">
                         <button type="button" class="yc-tab-button active" data-tab="general"><?php esc_html_e('Филиалы и доступ', 'yc-price-accordion'); ?></button>
                         <button type="button" class="yc-tab-button" data-tab="display"><?php esc_html_e('Отображение', 'yc-price-accordion'); ?></button>
+                        <button type="button" class="yc-tab-button" data-tab="services"><?php esc_html_e('Услуги', 'yc-price-accordion'); ?></button>
                         <button type="button" class="yc-tab-button" data-tab="advanced"><?php esc_html_e('Дополнительно', 'yc-price-accordion'); ?></button>
                     </nav>
                     <section class="yc-tab-panel active" data-tab="general">
@@ -125,6 +126,9 @@ class YC_Admin {
                     </section>
                     <section class="yc-tab-panel" data-tab="display">
                         <?php self::render_display_tab($branches_option); ?>
+                    </section>
+                    <section class="yc-tab-panel" data-tab="services">
+                        <?php self::render_services_tab($branches_option); ?>
                     </section>
                     <section class="yc-tab-panel" data-tab="advanced">
                         <?php self::render_advanced_tab(); ?>
@@ -232,6 +236,170 @@ class YC_Admin {
             <?php self::render_staff_links_section($branches_option); ?>
         </div>
         <?php
+    }
+
+    protected static function render_services_tab(array $branches_option) : void {
+        if (!class_exists('YC_API')) {
+            echo '<p>' . esc_html__('Модуль API не загружен. Проверьте установку плагина.', 'yc-price-accordion') . '</p>';
+            return;
+        }
+
+        $branches = array();
+        if (is_array($branches_option)) {
+            foreach ($branches_option as $branch) {
+                if (!is_array($branch)) {
+                    continue;
+                }
+                $cid = isset($branch['id']) ? (int) $branch['id'] : 0;
+                if ($cid <= 0) {
+                    continue;
+                }
+                $branches[] = array(
+                    'id'    => $cid,
+                    'title' => isset($branch['title']) && $branch['title'] !== '' ? $branch['title'] : sprintf(esc_html__('Филиал %d', 'yc-price-accordion'), $cid),
+                );
+            }
+        }
+
+        echo '<div class="yc-section">';
+        echo '<h2>' . esc_html__('Список услуг', 'yc-price-accordion') . '</h2>';
+        echo '<p class="description">' . esc_html__('Посмотрите выгруженные услуги по каждому филиалу. Обновите синхронизацию, если данные устарели.', 'yc-price-accordion') . '</p>';
+
+        if (empty($branches)) {
+            echo '<p>' . esc_html__('Добавьте хотя бы один филиал, чтобы увидеть услуги.', 'yc-price-accordion') . '</p>';
+            echo '</div>';
+            return;
+        }
+
+        echo '<div class="yc-services-list">';
+
+        foreach ($branches as $branch) {
+            $services = YC_API::get_services($branch['id']);
+            $service_count = is_array($services) ? count($services) : 0;
+            $active_count = 0;
+            $grouped = array();
+            $last_updated = self::get_services_last_updated(is_array($services) ? $services : array());
+
+            if (!empty($services) && is_array($services)) {
+                foreach ($services as $service) {
+                    if (!is_array($service)) {
+                        continue;
+                    }
+                    $group_key = '0';
+                    $group_name = esc_html__('Без категории', 'yc-price-accordion');
+                    if (!empty($service['category']) && is_array($service['category'])) {
+                        $group_id = isset($service['category']['id']) ? (int) $service['category']['id'] : 0;
+                        $group_title = isset($service['category']['title']) && $service['category']['title'] !== '' ? $service['category']['title'] : '';
+                        $normalized_title = $group_title;
+                        if ($group_title !== '') {
+                            if (function_exists('mb_strtolower')) {
+                                $normalized_title = mb_strtolower($group_title, 'UTF-8');
+                            } else {
+                                $normalized_title = strtolower($group_title);
+                            }
+                        }
+                        $group_key = $group_id . '|' . $normalized_title;
+                        $group_name = $group_title !== '' ? $group_title : sprintf(esc_html__('Категория #%d', 'yc-price-accordion'), $group_id);
+                    }
+                    if (!isset($grouped[$group_key])) {
+                        $grouped[$group_key] = array(
+                            'title'    => $group_name,
+                            'services' => array(),
+                        );
+                    }
+                    if (!empty($service['is_active'])) {
+                        $active_count++;
+                    }
+                    $grouped[$group_key]['services'][] = $service;
+                }
+            }
+
+            uasort($grouped, static function($a, $b) {
+                $aTitle = isset($a['title']) ? (string) $a['title'] : '';
+                $bTitle = isset($b['title']) ? (string) $b['title'] : '';
+                return strcasecmp($aTitle, $bTitle);
+            });
+
+            echo '<div class="yc-service-branch">';
+            echo '<div class="yc-service-branch-header">';
+            echo '<h3>' . esc_html($branch['title']) . ' (ID ' . (int) $branch['id'] . ')</h3>';
+            echo '<div class="yc-service-meta">';
+            echo '<span>' . sprintf(esc_html__('Всего услуг: %d', 'yc-price-accordion'), (int) $service_count) . '</span>';
+            echo '<span>' . sprintf(esc_html__('Активных: %d', 'yc-price-accordion'), (int) $active_count) . '</span>';
+            if ($last_updated !== '') {
+                echo '<span>' . sprintf(esc_html__('Обновлено: %s', 'yc-price-accordion'), esc_html($last_updated)) . '</span>';
+            }
+            echo '</div>';
+            echo '</div>';
+
+            if (empty($grouped)) {
+                echo '<p class="description">' . esc_html__('Нет сохранённых услуг. Выполните синхронизацию.', 'yc-price-accordion') . '</p>';
+                echo '</div>';
+                continue;
+            }
+
+            foreach ($grouped as $category) {
+                $category_title = isset($category['title']) ? $category['title'] : '';
+                $items = isset($category['services']) && is_array($category['services']) ? $category['services'] : array();
+                if (empty($items)) {
+                    continue;
+                }
+
+                usort($items, static function($a, $b) {
+                    $orderA = self::get_service_sort_order($a);
+                    $orderB = self::get_service_sort_order($b);
+                    if ($orderA !== $orderB) {
+                        return $orderA <=> $orderB;
+                    }
+                    $titleA = isset($a['title']) ? (string) $a['title'] : '';
+                    $titleB = isset($b['title']) ? (string) $b['title'] : '';
+                    return strcasecmp($titleA, $titleB);
+                });
+
+                echo '<div class="yc-service-category">';
+                echo '<h4>' . esc_html($category_title !== '' ? $category_title : esc_html__('Без категории', 'yc-price-accordion')) . ' (' . (int) count($items) . ')</h4>';
+                echo '<table class="widefat striped yc-services-table">';
+                echo '<thead><tr>';
+                echo '<th>' . esc_html__('Услуга', 'yc-price-accordion') . '</th>';
+                echo '<th>' . esc_html__('Стоимость', 'yc-price-accordion') . '</th>';
+                echo '<th>' . esc_html__('Длительность', 'yc-price-accordion') . '</th>';
+                echo '<th>' . esc_html__('Статус', 'yc-price-accordion') . '</th>';
+                echo '<th>' . esc_html__('Специалисты', 'yc-price-accordion') . '</th>';
+                echo '</tr></thead><tbody>';
+
+                foreach ($items as $service) {
+                    $title = isset($service['title']) ? $service['title'] : '';
+                    $description = isset($service['description']) ? $service['description'] : '';
+                    $price = self::format_service_price($service);
+                    $duration = self::format_service_duration($service);
+                    $is_active = !empty($service['is_active']);
+                    $status_class = $is_active ? 'is-active' : 'is-inactive';
+                    $status_label = $is_active ? esc_html__('Активна', 'yc-price-accordion') : esc_html__('Выключена', 'yc-price-accordion');
+                    $staff = self::format_service_staff_list($service);
+
+                    echo '<tr>';
+                    echo '<td>';
+                    echo '<strong>' . ($title !== '' ? esc_html($title) : '&#8212;') . '</strong>';
+                    if ($description !== '') {
+                        echo '<div class="yc-service-description">' . wp_kses_post(wpautop($description)) . '</div>';
+                    }
+                    echo '</td>';
+                    echo '<td>' . esc_html($price) . '</td>';
+                    echo '<td>' . esc_html($duration) . '</td>';
+                    echo '<td><span class="yc-service-status ' . esc_attr($status_class) . '">' . $status_label . '</span></td>';
+                    echo '<td>' . $staff . '</td>';
+                    echo '</tr>';
+                }
+
+                echo '</tbody></table>';
+                echo '</div>';
+            }
+
+            echo '</div>';
+        }
+
+        echo '</div>';
+        echo '</div>';
     }
 
     protected static function render_advanced_tab() : void {
@@ -391,6 +559,116 @@ class YC_Admin {
             }
         }
         echo '</div>';
+    }
+
+    protected static function get_service_sort_order($service) : int {
+        if (!is_array($service)) {
+            return PHP_INT_MAX;
+        }
+        if (isset($service['sort_order']) && is_numeric($service['sort_order'])) {
+            return (int) $service['sort_order'];
+        }
+        if (isset($service['weight']) && is_numeric($service['weight'])) {
+            return (int) $service['weight'];
+        }
+        if (isset($service['order']) && is_numeric($service['order'])) {
+            return (int) $service['order'];
+        }
+        return PHP_INT_MAX;
+    }
+
+    protected static function format_service_price(array $service) : string {
+        $min = isset($service['price_min']) ? (float) $service['price_min'] : 0.0;
+        $max = isset($service['price_max']) ? (float) $service['price_max'] : $min;
+
+        if ($min <= 0 && $max <= 0) {
+            return '—';
+        }
+
+        $format_number = static function($value) {
+            $decimals = abs($value - round($value)) > 0.001 ? 2 : 0;
+            return number_format_i18n($value, $decimals);
+        };
+
+        if ($min <= 0 && $max > 0) {
+            return $format_number($max);
+        }
+
+        if ($min > 0 && $max <= 0) {
+            $max = $min;
+        }
+
+        if (abs($min - $max) < 0.001) {
+            return $format_number($min);
+        }
+
+        return $format_number($min) . ' – ' . $format_number($max);
+    }
+
+    protected static function format_service_duration(array $service) : string {
+        $minutes = isset($service['duration']) ? (int) $service['duration'] : 0;
+        if ($minutes <= 0) {
+            return '—';
+        }
+        $hours = intdiv($minutes, 60);
+        $remain = $minutes % 60;
+        $parts = array();
+        if ($hours > 0) {
+            $parts[] = sprintf(_n('%d час', '%d часа', $hours, 'yc-price-accordion'), $hours);
+        }
+        if ($remain > 0) {
+            $parts[] = sprintf(_n('%d минута', '%d минуты', $remain, 'yc-price-accordion'), $remain);
+        }
+        return implode(' ', $parts);
+    }
+
+    protected static function format_service_staff_list(array $service) : string {
+        if (empty($service['staff']) || !is_array($service['staff'])) {
+            return '&#8212;';
+        }
+
+        $names = array();
+        foreach ($service['staff'] as $member) {
+            if (!is_array($member)) {
+                continue;
+            }
+            $name = isset($member['name']) ? trim((string) $member['name']) : '';
+            if ($name === '') {
+                continue;
+            }
+            $names[] = $name;
+        }
+
+        if (empty($names)) {
+            return '&#8212;';
+        }
+
+        $names = array_values(array_unique($names));
+        $display = array_slice($names, 0, 3);
+        $more = count($names) - count($display);
+        $html = esc_html(implode(', ', $display));
+        if ($more > 0) {
+            $html .= '<br /><span class="yc-service-staff-more">' . sprintf(esc_html__('и ещё %d', 'yc-price-accordion'), $more) . '</span>';
+        }
+        return $html;
+    }
+
+    protected static function get_services_last_updated(array $services) : string {
+        $latest = '';
+        foreach ($services as $service) {
+            if (!is_array($service) || empty($service['updated_at'])) {
+                continue;
+            }
+            $value = (string) $service['updated_at'];
+            if ($latest === '' || strcmp($value, $latest) > 0) {
+                $latest = $value;
+            }
+        }
+        if ($latest === '') {
+            return '';
+        }
+        $format = get_option('date_format') . ' ' . get_option('time_format');
+        return get_date_from_gmt($latest, $format);
     }
 
     public static function sanitize_book_step($value) {
