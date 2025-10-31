@@ -317,13 +317,13 @@ class YC_Repository {
             }
             $ids[] = $staff_id;
             $sort_order = null;
-            if (isset($row['sort_order'])) {
+            if (isset($row['sort_order']) && $row['sort_order'] !== null && $row['sort_order'] !== '') {
                 $sort_order = (int) $row['sort_order'];
-            } elseif (isset($row['weight'])) {
+            } elseif (isset($row['weight']) && $row['weight'] !== null && $row['weight'] !== '') {
                 $sort_order = (int) $row['weight'];
             }
             if ($sort_order === null) {
-                $sort_order = 0;
+                $sort_order = 500;
             }
             $data = array(
                 'company_id' => $company_id,
