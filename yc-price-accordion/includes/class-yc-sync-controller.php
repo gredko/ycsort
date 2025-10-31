@@ -25,11 +25,15 @@ class YC_Sync_Controller {
         register_rest_route(self::ROUTE_NAMESPACE, '/sync', array(
             array(
                 'methods'             => $readable,
+        register_rest_route(self::ROUTE_NAMESPACE, '/sync', array(
+            array(
+                'methods'             => WP_REST_Server::READABLE,
                 'callback'            => [__CLASS__, 'get_status'],
                 'permission_callback' => [__CLASS__, 'check_permissions'],
             ),
             array(
                 'methods'             => $creatable,
+                'methods'             => WP_REST_Server::CREATABLE,
                 'callback'            => [__CLASS__, 'handle_sync'],
                 'permission_callback' => [__CLASS__, 'check_permissions'],
                 'args'                => array(
@@ -126,5 +130,32 @@ class YC_Sync_Controller {
         }
 
         return $data;
+    public static function get_status() : WP_REST_Response {
+        $branches = yc_get_branches();
+        $last_sync = (int) get_option(YC_Admin::OPTION_LAST_SYNC, 0);
+        return new WP_REST_Response(array(
+            'branches'  => $branches,
+            'last_sync' => $last_sync,
+        ));
+    }
+
+    public static function handle_sync(WP_REST_Request $request) {
+        $mode = $request->get_param('mode');
+        if ($mode === 'plan') {
+            return self::get_status();
+        }
+        $company_id = (int) $request->get_param('company_id');
+        if ($company_id <= 0) {
+            return new WP_Error('yc_pa_invalid_company', __('Некорректный идентификатор филиала', 'yc-price-accordion'), array('status' => 400));
+        }
+        $args = $request->get_json_params();
+        if (!is_array($args)) {
+            $args = array();
+        }
+        $result = YC_Sync_Service::sync_company($company_id, $args);
+        return new WP_REST_Response(array(
+            'company_id' => $company_id,
+            'result'     => $result,
+        ));
     }
 }
