@@ -35,10 +35,18 @@
 .yc-admin-table{width:100%;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden}
 .yc-admin-table th,.yc-admin-table td{padding:10px;font-size:13px}
 .yc-admin-table td:last-child{width:60px;text-align:center}
+.yc-staff-table td:last-child{width:auto;text-align:left}
 .yc-admin-table input{width:100%}
 
 .yc-staff-links-block{margin-bottom:24px}
 .yc-staff-links-block table{margin-top:10px}
+
+.yc-staff-branch-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px}
+.yc-staff-branch-label{display:block;font-weight:600}
+.yc-staff-branch-controls{display:flex;flex-wrap:wrap;gap:12px;margin-top:6px}
+.yc-staff-branch-controls label{display:flex;align-items:center;gap:6px;font-weight:400}
+.yc-staff-branch-controls .small-text{width:80px}
+.yc-staff-branch-controls .regular-text{min-width:220px;flex:1}
 
 .yc-manual-order{display:flex;flex-direction:column;margin-bottom:16px;font-size:13px}
 .yc-manual-order textarea{margin-top:6px;font-family:monospace;width:100%;min-height:80px}
@@ -49,4 +57,6 @@
   .yc-admin-table thead{display:none}
   .yc-admin-table tr{display:grid;grid-template-columns:1fr;gap:8px;border-bottom:1px solid #e2e8f0}
   .yc-admin-table td{width:100%}
+  .yc-staff-branch-controls{flex-direction:column;align-items:flex-start}
+  .yc-staff-branch-controls .regular-text{width:100%;min-width:0}
 }

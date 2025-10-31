@@ -25,7 +25,7 @@ class YC_Shortcode {
   }
 
   private static function render_staff_grid($branches, $filter_branch, $filter_single, $filter_multi){
-    $list = array();
+    $groups = array();
     $use_filter = ($filter_single || !empty($filter_multi));
 
     $link_branches = $branches;
@@ -139,23 +139,48 @@ class YC_Shortcode {
           $pos = implode(', ', array_filter($pos));
         }
         $pos = yc_sanitize_position($pos);
-        $nameKey = yc_normalize_name($st['name']);
-        if ($nameKey === '') {
-          continue;
+
+        $manual_weight = null;
+        if (isset($st['sort_order']) && $st['sort_order'] !== null && $st['sort_order'] !== '') {
+          $manual_weight = (int) $st['sort_order'];
         }
 
-        $manual_weight = isset($st['sort_order']) ? (int) $st['sort_order'] : null;
-
-        $list[] = array(
+        $payload = array(
           'id'           => $sid,
           'name'         => $st['name'],
           'image_url'    => $st['image_url'],
           'position'     => $pos,
           'manual_order' => $manual_weight,
-          'branch_id'    => $cid,
-          'branch_title' => isset($branch['title']) ? $branch['title'] : '',
+          'sort_order'   => $manual_weight,
         );
+
+        $branch_meta = array(
+          'id'    => $cid,
+          'title' => isset($branch['title']) ? $branch['title'] : '',
+        );
+
+        yc_pa_group_staff_member($groups, $payload, $branch_meta);
       }
+    }
+
+    if (empty($groups)) {
+      return '<div class="yc-price-empty">Нет специалистов по выбранным категориям.</div>';
+    }
+
+    $groups = yc_pa_finalize_staff_groups($groups);
+    $list = array();
+    foreach ($groups as $entry) {
+      $list[] = array(
+        'id'           => isset($entry['primary_staff_id']) ? (int) $entry['primary_staff_id'] : 0,
+        'name'         => isset($entry['name']) ? $entry['name'] : '',
+        'image_url'    => isset($entry['image_url']) ? $entry['image_url'] : '',
+        'position'     => isset($entry['position']) ? $entry['position'] : '',
+        'manual_order' => isset($entry['manual_order']) ? (int) $entry['manual_order'] : 500,
+        'branch_id'    => isset($entry['primary_branch_id']) ? (int) $entry['primary_branch_id'] : 0,
+        'branch_title' => isset($entry['primary_branch_title']) ? $entry['primary_branch_title'] : '',
+        'branch_map'   => isset($entry['branch_map']) && is_array($entry['branch_map']) ? $entry['branch_map'] : array(),
+        'branch_titles'=> isset($entry['branch_titles']) && is_array($entry['branch_titles']) ? $entry['branch_titles'] : array(),
+      );
     }
 
     if (empty($list)) {
@@ -185,13 +210,32 @@ class YC_Shortcode {
     $version_attr = esc_attr(YC_PA_VER);
 
     $render_link = static function($branches, $staff) {
-      $staff_id = isset($staff['id']) ? (int) $staff['id'] : 0;
-      $primary_branch = isset($staff['branch_id']) ? (int) $staff['branch_id'] : 0;
-      if ($staff_id > 0 && $primary_branch > 0) {
-        $primary = yc_get_staff_link($primary_branch, $staff_id);
-        if ($primary) {
-          return $primary;
+      $ordered_branches = array();
+      if (isset($staff['branch_map']) && is_array($staff['branch_map']) && !empty($staff['branch_map'])) {
+        $primary_branch = isset($staff['branch_id']) ? (int) $staff['branch_id'] : 0;
+        if ($primary_branch > 0 && isset($staff['branch_map'][$primary_branch])) {
+          $ordered_branches[$primary_branch] = (int) $staff['branch_map'][$primary_branch];
         }
+        foreach ($staff['branch_map'] as $branch_id => $staff_id) {
+          $bid = (int) $branch_id;
+          $sid = (int) $staff_id;
+          if ($bid <= 0 || $sid <= 0) {
+            continue;
+          }
+          if (!isset($ordered_branches[$bid])) {
+            $ordered_branches[$bid] = $sid;
+          }
+        }
+        foreach ($ordered_branches as $branch_id => $staff_id) {
+          $href = yc_get_staff_link($branch_id, $staff_id);
+          if ($href) {
+            return $href;
+          }
+        }
+      }
+      $staff_id = isset($staff['id']) ? (int) $staff['id'] : 0;
+      if ($staff_id <= 0) {
+        return '';
       }
       foreach ($branches as $branch) {
         $branch_id = isset($branch['id']) ? (int) $branch['id'] : 0;

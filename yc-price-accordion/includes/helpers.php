@@ -164,3 +164,105 @@ function yc_normalize_name($name){
   }
   return $name;
 }
+
+function yc_pa_get_staff_sort_order($staff){
+  if (!is_array($staff)) return 500;
+  if (isset($staff['manual_order']) && $staff['manual_order'] !== '' && $staff['manual_order'] !== null) {
+    if (is_numeric($staff['manual_order'])) return (int) $staff['manual_order'];
+  }
+  if (isset($staff['sort_order']) && $staff['sort_order'] !== '' && $staff['sort_order'] !== null) {
+    if (is_numeric($staff['sort_order'])) return (int) $staff['sort_order'];
+  }
+  if (isset($staff['weight']) && $staff['weight'] !== '' && $staff['weight'] !== null) {
+    if (is_numeric($staff['weight'])) return (int) $staff['weight'];
+  }
+  return 500;
+}
+
+function yc_pa_group_staff_member(&$groups, $staff, $branch_meta){
+  if (!is_array($staff) || !is_array($branch_meta)) return;
+  $name = isset($staff['name']) ? (string) $staff['name'] : '';
+  $name_key = yc_normalize_name($name);
+  if ($name_key === '') return;
+  $branch_id = isset($branch_meta['id']) ? (int) $branch_meta['id'] : 0;
+  if ($branch_id <= 0) return;
+  $branch_title = isset($branch_meta['title']) ? $branch_meta['title'] : '';
+  $staff_id = 0;
+  if (isset($staff['id'])) $staff_id = (int) $staff['id'];
+  if ($staff_id <= 0 && isset($staff['staff_id'])) $staff_id = (int) $staff['staff_id'];
+  if ($staff_id <= 0) return;
+
+  $order = yc_pa_get_staff_sort_order($staff);
+  $position = isset($staff['position']) ? yc_sanitize_position($staff['position']) : '';
+  $image = isset($staff['image_url']) ? (string) $staff['image_url'] : '';
+
+  if (!isset($groups[$name_key])) {
+    $groups[$name_key] = array(
+      'name_key' => $name_key,
+      'name' => $name,
+      'position_set' => array(),
+      'position' => '',
+      'image_url' => $image,
+      'manual_order' => $order,
+      'primary_staff_id' => $staff_id,
+      'primary_branch_id' => $branch_id,
+      'primary_branch_title' => $branch_title,
+      'branch_map' => array($branch_id => $staff_id),
+      'branch_priority' => array($branch_id => $order),
+      'branch_titles' => array($branch_id => $branch_title),
+      'branch_entries' => array(),
+      'ids' => array($staff_id => true),
+    );
+  } else {
+    if ($groups[$name_key]['name'] === '' && $name !== '') {
+      $groups[$name_key]['name'] = $name;
+    }
+    if ($groups[$name_key]['image_url'] === '' && $image !== '') {
+      $groups[$name_key]['image_url'] = $image;
+    }
+    if ($order < $groups[$name_key]['manual_order']) {
+      $groups[$name_key]['manual_order'] = $order;
+      $groups[$name_key]['primary_staff_id'] = $staff_id;
+      $groups[$name_key]['primary_branch_id'] = $branch_id;
+      $groups[$name_key]['primary_branch_title'] = $branch_title;
+    }
+  }
+
+  if (!isset($groups[$name_key]['branch_priority'][$branch_id]) || $order < $groups[$name_key]['branch_priority'][$branch_id]) {
+    $groups[$name_key]['branch_priority'][$branch_id] = $order;
+    $groups[$name_key]['branch_map'][$branch_id] = $staff_id;
+  }
+  $groups[$name_key]['branch_titles'][$branch_id] = $branch_title;
+  $groups[$name_key]['ids'][$staff_id] = true;
+
+  if ($position !== '') {
+    $groups[$name_key]['position_set'][$position] = true;
+  }
+
+  if (!isset($groups[$name_key]['branch_entries'][$branch_id])) {
+    $groups[$name_key]['branch_entries'][$branch_id] = array();
+  }
+  $groups[$name_key]['branch_entries'][$branch_id][$staff_id] = array(
+    'staff_id' => $staff_id,
+    'branch_id' => $branch_id,
+    'branch_title' => $branch_title,
+    'order' => $order,
+    'position' => $position,
+    'name' => $name,
+    'image_url' => $image,
+  );
+}
+
+function yc_pa_finalize_staff_groups($groups){
+  if (!is_array($groups)) return array();
+  foreach ($groups as $key => $entry) {
+    $position = '';
+    if (!empty($entry['position_set']) && is_array($entry['position_set'])) {
+      $position = implode(', ', array_keys($entry['position_set']));
+    }
+    $entry['position'] = $position;
+    $entry['manual_order'] = isset($entry['manual_order']) ? (int) $entry['manual_order'] : 500;
+    $groups[$key] = $entry;
+  }
+  return $groups;
+}

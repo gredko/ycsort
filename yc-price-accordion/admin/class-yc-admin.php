@@ -297,44 +297,100 @@ class YC_Admin {
         if (!is_array($map)) {
             $map = array();
         }
+
+        $groups = array();
+        $missing = array();
         foreach ($branches as $branch) {
             $cid = isset($branch['id']) ? (int) $branch['id'] : 0;
             if ($cid <= 0) {
                 continue;
             }
             $title = isset($branch['title']) ? $branch['title'] : ('Company ' . $cid);
-            echo '<div class="yc-staff-links-block">';
-            echo '<h3>' . esc_html($title) . ' (ID ' . $cid . ')</h3>';
             $staffs = YC_API::get_staff($cid);
             if (empty($staffs)) {
-                echo '<p>' . esc_html__('Нет сохранённых специалистов. Выполните синхронизацию.', 'yc-price-accordion') . '</p>';
-                echo '</div>';
+                $missing[] = $title . ' (ID ' . $cid . ')';
                 continue;
             }
-            echo '<table class="widefat striped"><thead><tr><th>ID</th><th>' . esc_html__('Имя', 'yc-price-accordion') . '</th><th>' . esc_html__('Должность', 'yc-price-accordion') . '</th><th>' . esc_html__('Порядок', 'yc-price-accordion') . '</th><th>' . esc_html__('Ссылка', 'yc-price-accordion') . '</th></tr></thead><tbody>';
             foreach ($staffs as $staff) {
-                $sid = isset($staff['id']) ? (int) $staff['id'] : 0;
-                if ($sid <= 0) {
+                yc_pa_group_staff_member($groups, $staff, array('id' => $cid, 'title' => $title));
+            }
+        }
+
+        if (empty($groups)) {
+            echo '<p>' . esc_html__('Нет сохранённых специалистов. Выполните синхронизацию.', 'yc-price-accordion') . '</p>';
+            if (!empty($missing)) {
+                foreach ($missing as $label) {
+                    echo '<p><strong>' . esc_html($label) . '</strong>: ' . esc_html__('Нет сохранённых специалистов. Выполните синхронизацию.', 'yc-price-accordion') . '</p>';
+                }
+            }
+            return;
+        }
+
+        $groups = yc_pa_finalize_staff_groups($groups);
+        $list = array_values($groups);
+        usort($list, static function($a, $b) {
+            $ma = isset($a['manual_order']) ? (int) $a['manual_order'] : PHP_INT_MAX;
+            $mb = isset($b['manual_order']) ? (int) $b['manual_order'] : PHP_INT_MAX;
+            if ($ma !== $mb) {
+                return $ma <=> $mb;
+            }
+            $na = isset($a['name']) ? (string) $a['name'] : '';
+            $nb = isset($b['name']) ? (string) $b['name'] : '';
+            $cmp = strcasecmp($na, $nb);
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+            $ba = isset($a['primary_branch_title']) ? (string) $a['primary_branch_title'] : '';
+            $bb = isset($b['primary_branch_title']) ? (string) $b['primary_branch_title'] : '';
+            return strcasecmp($ba, $bb);
+        });
+
+        echo '<div class="yc-staff-links-block">';
+        echo '<h3>' . esc_html__('Специалисты', 'yc-price-accordion') . '</h3>';
+        echo '<table class="widefat striped yc-admin-table yc-staff-table">';
+        echo '<thead><tr><th>' . esc_html__('Имя', 'yc-price-accordion') . '</th><th>' . esc_html__('Должность', 'yc-price-accordion') . '</th><th>' . esc_html__('Филиалы', 'yc-price-accordion') . '</th></tr></thead><tbody>';
+        foreach ($list as $entry) {
+            $name = isset($entry['name']) ? $entry['name'] : '';
+            $position = isset($entry['position']) ? $entry['position'] : '';
+            $branch_entries = isset($entry['branch_entries']) && is_array($entry['branch_entries']) ? $entry['branch_entries'] : array();
+            echo '<tr>';
+            echo '<td>' . ($name !== '' ? esc_html($name) : '&#8212;') . '</td>';
+            echo '<td>' . ($position !== '' ? esc_html($position) : '&#8212;') . '</td>';
+            echo '<td>';
+            echo '<ul class="yc-staff-branch-list">';
+            foreach ($branch_entries as $branch_id => $staff_rows) {
+                if (!is_array($staff_rows)) {
                     continue;
                 }
-                $name = isset($staff['name']) ? $staff['name'] : '';
-                $position = '';
-                if (isset($staff['position'])) {
-                    $position = is_array($staff['position']) ? implode(', ', array_filter($staff['position'])) : $staff['position'];
+                foreach ($staff_rows as $staff_id => $staff_row) {
+                    $bid = (int) $branch_id;
+                    $sid = (int) $staff_id;
+                    if ($bid <= 0 || $sid <= 0) {
+                        continue;
+                    }
+                    $branch_title = isset($staff_row['branch_title']) && $staff_row['branch_title'] !== '' ? $staff_row['branch_title'] : ('ID ' . $bid);
+                    $order = isset($staff_row['order']) ? (int) $staff_row['order'] : 500;
+                    $link_val = isset($map[$bid][$sid]) ? $map[$bid][$sid] : '';
+                    echo '<li>';
+                    echo '<span class="yc-staff-branch-label">' . esc_html($branch_title) . ' (ID ' . $bid . ', #' . $sid . ')</span>';
+                    echo '<div class="yc-staff-branch-controls">';
+                    echo '<label>' . esc_html__('Порядок', 'yc-price-accordion') . ' <input type="number" class="small-text" name="yc_staff_order[' . $bid . '][' . $sid . ']" value="' . esc_attr($order) . '" /></label>';
+                    echo '<label>' . esc_html__('Ссылка', 'yc-price-accordion') . ' <input type="text" class="regular-text" name="' . esc_attr(self::OPTION_STAFF_LINKS) . '[' . $bid . '][' . $sid . ']" value="' . esc_attr($link_val) . '" placeholder="https://example.com/staff" /></label>';
+                    echo '</div>';
+                    echo '</li>';
                 }
-                $order = isset($staff['sort_order']) ? (int) $staff['sort_order'] : '';
-                $val = isset($map[$cid][$sid]) ? $map[$cid][$sid] : '';
-                echo '<tr>';
-                echo '<td>' . $sid . '</td>';
-                echo '<td>' . esc_html($name) . '</td>';
-                echo '<td>' . esc_html($position) . '</td>';
-                echo '<td><input type="number" class="small-text" name="yc_staff_order[' . $cid . '][' . $sid . ']" value="' . esc_attr($order) . '" /></td>';
-                echo '<td><input type="text" class="regular-text" name="' . esc_attr(self::OPTION_STAFF_LINKS) . '[' . $cid . '][' . $sid . ']" value="' . esc_attr($val) . '" placeholder="https://example.com/staff" /></td>';
-                echo '</tr>';
             }
-            echo '</tbody></table>';
-            echo '</div>';
+            echo '</ul>';
+            echo '</td>';
+            echo '</tr>';
         }
+        echo '</tbody></table>';
+        if (!empty($missing)) {
+            foreach ($missing as $label) {
+                echo '<p><strong>' . esc_html($label) . '</strong>: ' . esc_html__('Нет сохранённых специалистов. Выполните синхронизацию.', 'yc-price-accordion') . '</p>';
+            }
+        }
+        echo '</div>';
     }
 
     public static function sanitize_book_step($value) {
