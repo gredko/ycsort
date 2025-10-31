@@ -336,8 +336,36 @@ class YC_Shortcode {
       }
       $categories=array();
       foreach($grouped as $cat_id=>$row){
-        $cat_name = isset($cats[$cat_id])?$cats[$cat_id]:('Категория #'.$cat_id);
-        $categories[] = array('category_id'=>$cat_id,'category_name'=>$cat_name,'items'=>$row['items']);
+        $cat_name = '';
+        if ($cat_id === 0) {
+          $cat_name = 'Без категории';
+        }
+        if ($cat_name === '' && isset($cats[$cat_id]) && $cats[$cat_id] !== '') {
+          $cat_name = $cats[$cat_id];
+        }
+        if ($cat_name === '' && !empty($row['items']) && is_array($row['items'])) {
+          foreach ($row['items'] as $svc_row) {
+            if (!is_array($svc_row)) continue;
+            if (!empty($svc_row['category']) && is_array($svc_row['category'])) {
+              if (!empty($svc_row['category']['title'])) { $cat_name = (string) $svc_row['category']['title']; break; }
+              if (!empty($svc_row['category']['name'])) { $cat_name = (string) $svc_row['category']['name']; break; }
+            }
+            if (!empty($svc_row['category_name'])) { $cat_name = (string) $svc_row['category_name']; break; }
+          }
+        }
+        if ($cat_name === '') {
+          $cat_name = 'Категория #' . $cat_id;
+        }
+        $cat_label = $cat_name;
+        if ($cat_id > 0 && stripos($cat_label, '#' . $cat_id) === false) {
+          $cat_label .= ' · #' . $cat_id;
+        }
+        $categories[] = array(
+          'category_id'    => $cat_id,
+          'category_name'  => $cat_name,
+          'category_label' => $cat_label,
+          'items'          => $row['items']
+        );
       }
       usort($categories,function($a,$b){ return strcasecmp($a['category_name'],$b['category_name']); });
       $dataset[] = array('branch'=>$b,'categories'=>$categories);
@@ -381,14 +409,27 @@ class YC_Shortcode {
           $items = $cat['items'];
           $total = count($items); $initial = array_slice($items,0,$page); $rest = array_slice($items,$page);
           echo '<div class="yc-cat" data-category="'.esc_attr($cat['category_id']).'">';
-          echo '<div class="yc-cat-title">'.esc_html($cat['category_name']).($total>$page?' · <span class="yc-cat-count">'.intval($total).'</span>':'').'</div>';
+          $cat_label = isset($cat['category_label']) ? $cat['category_label'] : (isset($cat['category_name']) ? $cat['category_name'] : 'Категория');
+          echo '<div class="yc-cat-title">'.esc_html($cat_label).($total>$page?' · <span class="yc-cat-count">'.intval($total).'</span>':'').'</div>';
           echo '<ul class="yc-services"'.(!empty($rest)?' data-rest="'.esc_attr(json_encode($rest)).'"':'').'>';
           foreach($initial as $svc){
             $name = isset($svc['title'])?$svc['title']:(isset($svc['name'])?$svc['name']:'');
             $sid  = intval(isset($svc['id'])?$svc['id']:0);
             $pmin = floatval(isset($svc['price_min'])?$svc['price_min']:(isset($svc['price'])?$svc['price']:0));
             $pmax = floatval(isset($svc['price_max'])?$svc['price_max']:0);
-            $price_txt = ($pmax && $pmax!=$pmin)?number_format($pmin,0,',',' ').'–'.number_format($pmax,0,',',' ').' ₽':number_format($pmin,0,',',' ').' ₽';
+            $format_price = static function($value) {
+              $decimals = abs($value - round($value)) > 0.001 ? 2 : 0;
+              return number_format($value, $decimals, ',', ' ');
+            };
+            $price_txt = '—';
+            if ($pmin > 0 || $pmax > 0) {
+              if ($pmin > 0 && $pmax > 0 && abs($pmax - $pmin) >= 0.01) {
+                $price_txt = $format_price($pmin).'–'.$format_price($pmax).' ₽';
+              } else {
+                $single = $pmax > 0 ? $pmax : $pmin;
+                $price_txt = $format_price($single).' ₽';
+              }
+            }
             $branch_arr = isset($svc['branch'])?$svc['branch']:array('id'=>intval($svc['company_id']));
             $book_url = yc_pa_build_booking_url($branch_arr, intval($svc['company_id']), $sid);
             echo '<li class="yc-service"><div class="yc-service-row"><div class="yc-service-name">'.esc_html($name).'</div><div class="yc-service-right"><div class="yc-service-price">'.esc_html($price_txt).'</div>';

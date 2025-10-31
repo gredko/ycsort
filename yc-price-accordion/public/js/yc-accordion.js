@@ -57,12 +57,29 @@
       var acc = safeClosest(moreBtn, '.yc-accordion');
       var page = parseInt(acc ? (acc.getAttribute('data-page') || '15') : '15', 10);
       var chunk = items.splice(0, page);
+      var formatPriceValue = function(value) {
+        var n = Number(value) || 0;
+        var decimals = Math.abs(n - Math.round(n)) > 0.001 ? 2 : 0;
+        try {
+          return n.toLocaleString('ru-RU', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+        } catch (ex) {
+          return n.toLocaleString('ru-RU');
+        }
+      };
       for (var i=0;i<chunk.length;i++) {
         var svc = chunk[i];
         var name = svc.title || svc.name || '';
         var pmin = Number((svc.price_min!=null?svc.price_min:(svc.price!=null?svc.price:0))) || 0;
         var pmax = Number((svc.price_max!=null?svc.price_max:0)) || 0;
-        var price = (pmax && pmax!==pmin) ? (pmin.toLocaleString('ru-RU') + '–' + pmax.toLocaleString('ru-RU') + ' ₽') : (pmin.toLocaleString('ru-RU') + ' ₽');
+        var price = '—';
+        if (pmin > 0 || pmax > 0) {
+          if (pmin > 0 && pmax > 0 && Math.abs(pmax - pmin) >= 0.01) {
+            price = formatPriceValue(pmin) + '–' + formatPriceValue(pmax) + ' ₽';
+          } else {
+            var single = pmax > 0 ? pmax : pmin;
+            price = formatPriceValue(single) + ' ₽';
+          }
+        }
         var li = document.createElement('li');
         li.className = 'yc-service';
         li.innerHTML = '<div class="yc-service-row"><div class="yc-service-name"></div><div class="yc-service-right"><div class="yc-service-price"></div></div></div>';
