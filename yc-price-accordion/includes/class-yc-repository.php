@@ -130,7 +130,7 @@ class YC_Repository {
     public static function get_staff_index(int $company_id) : array {
         global $wpdb;
         $table = self::table_staff();
-        $rows  = $wpdb->get_results($wpdb->prepare("SELECT staff_id, image_id, image_url, image_hash FROM $table WHERE company_id = %d", $company_id), ARRAY_A);
+        $rows  = $wpdb->get_results($wpdb->prepare("SELECT staff_id, image_id, image_url, image_hash, sort_order FROM $table WHERE company_id = %d", $company_id), ARRAY_A);
         $index = array();
         if (is_array($rows)) {
             foreach ($rows as $row) {
@@ -142,6 +142,7 @@ class YC_Repository {
                     'image_id'   => isset($row['image_id']) ? (int) $row['image_id'] : 0,
                     'image_url'  => isset($row['image_url']) ? (string) $row['image_url'] : '',
                     'image_hash' => isset($row['image_hash']) ? (string) $row['image_hash'] : '',
+                    'sort_order' => isset($row['sort_order']) ? (int) $row['sort_order'] : 0,
                 );
             }
         }
@@ -315,6 +316,15 @@ class YC_Repository {
                 continue;
             }
             $ids[] = $staff_id;
+            $sort_order = null;
+            if (isset($row['sort_order'])) {
+                $sort_order = (int) $row['sort_order'];
+            } elseif (isset($row['weight'])) {
+                $sort_order = (int) $row['weight'];
+            }
+            if ($sort_order === null) {
+                $sort_order = 0;
+            }
             $data = array(
                 'company_id' => $company_id,
                 'staff_id'   => $staff_id,
@@ -326,7 +336,7 @@ class YC_Repository {
                 'image_hash' => '',
                 'raw_data'   => wp_json_encode($row),
                 'is_active'  => isset($row['active']) ? (int) !!$row['active'] : 1,
-                'sort_order' => isset($row['weight']) ? (int) $row['weight'] : 0,
+                'sort_order' => $sort_order,
                 'updated_at' => $now,
             );
             if (isset($image_map[$staff_id])) {
@@ -695,6 +705,7 @@ class YC_Repository {
                 'about'     => isset($row['about']) ? $row['about'] : '',
                 'image_id'  => isset($row['image_id']) ? (int) $row['image_id'] : 0,
                 'image_url' => isset($row['image_url']) ? $row['image_url'] : '',
+                'sort_order'=> isset($row['sort_order']) ? (int) $row['sort_order'] : 0,
                 'company_id'=> $company_id,
             );
             if (!empty($row['raw_data'])) {
@@ -715,6 +726,37 @@ class YC_Repository {
             $list[$sid] = $data;
         }
         return $list;
+    }
+
+    public static function set_staff_sort_order(int $company_id, array $orders) : void {
+        if ($company_id <= 0 || empty($orders)) {
+            return;
+        }
+
+        global $wpdb;
+        $table = self::table_staff();
+        $now   = self::now();
+
+        foreach ($orders as $staff_id => $weight) {
+            $sid = (int) $staff_id;
+            if ($sid <= 0) {
+                continue;
+            }
+            $order = is_numeric($weight) ? (int) $weight : 0;
+            $wpdb->update(
+                $table,
+                array(
+                    'sort_order' => $order,
+                    'updated_at' => $now,
+                ),
+                array(
+                    'company_id' => $company_id,
+                    'staff_id'   => $sid,
+                ),
+                array('%d', '%s'),
+                array('%d', '%d')
+            );
+        }
     }
 
     public static function get_services(int $company_id, $category_id = null) : array {

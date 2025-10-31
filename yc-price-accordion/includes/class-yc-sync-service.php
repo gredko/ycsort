@@ -351,6 +351,13 @@ class YC_Sync_Service {
             $row['position'] = $position;
             $row['about']    = $about;
             $row['image_url'] = isset($images[$sid]['url']) && $images[$sid]['url'] !== '' ? $images[$sid]['url'] : $image_url;
+            if (!isset($row['sort_order'])) {
+                if (isset($row['weight'])) {
+                    $row['sort_order'] = (int) $row['weight'];
+                } elseif (isset($existing[$sid]['sort_order'])) {
+                    $row['sort_order'] = (int) $existing[$sid]['sort_order'];
+                }
+            }
             $row['id'] = $sid;
             if (!isset($row['name'])) {
                 $row['name'] = '';

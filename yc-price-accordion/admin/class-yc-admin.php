@@ -249,11 +249,6 @@ class YC_Admin {
                 <span><?php esc_html_e('Включить отладочную информацию на витрине (видно только администраторам)', 'yc-price-accordion'); ?></span>
             </label>
         </div>
-        <div class="yc-section">
-            <h2><?php esc_html_e('Ручной порядок специалистов', 'yc-price-accordion'); ?></h2>
-            <p class="description"><?php esc_html_e('Используйте веса вида id=порядок, через запятую. Меньшее значение — выше в списке.', 'yc-price-accordion'); ?></p>
-            <?php self::render_manual_order_section(); ?>
-        </div>
         <?php
     }
 
@@ -316,7 +311,7 @@ class YC_Admin {
                 echo '</div>';
                 continue;
             }
-            echo '<table class="widefat striped"><thead><tr><th>ID</th><th>' . esc_html__('Имя', 'yc-price-accordion') . '</th><th>' . esc_html__('Должность', 'yc-price-accordion') . '</th><th>' . esc_html__('Ссылка', 'yc-price-accordion') . '</th></tr></thead><tbody>';
+            echo '<table class="widefat striped"><thead><tr><th>ID</th><th>' . esc_html__('Имя', 'yc-price-accordion') . '</th><th>' . esc_html__('Должность', 'yc-price-accordion') . '</th><th>' . esc_html__('Порядок', 'yc-price-accordion') . '</th><th>' . esc_html__('Ссылка', 'yc-price-accordion') . '</th></tr></thead><tbody>';
             foreach ($staffs as $staff) {
                 $sid = isset($staff['id']) ? (int) $staff['id'] : 0;
                 if ($sid <= 0) {
@@ -327,46 +322,18 @@ class YC_Admin {
                 if (isset($staff['position'])) {
                     $position = is_array($staff['position']) ? implode(', ', array_filter($staff['position'])) : $staff['position'];
                 }
+                $order = isset($staff['sort_order']) ? (int) $staff['sort_order'] : '';
                 $val = isset($map[$cid][$sid]) ? $map[$cid][$sid] : '';
                 echo '<tr>';
                 echo '<td>' . $sid . '</td>';
                 echo '<td>' . esc_html($name) . '</td>';
                 echo '<td>' . esc_html($position) . '</td>';
+                echo '<td><input type="number" class="small-text" name="yc_staff_order[' . $cid . '][' . $sid . ']" value="' . esc_attr($order) . '" /></td>';
                 echo '<td><input type="text" class="regular-text" name="' . esc_attr(self::OPTION_STAFF_LINKS) . '[' . $cid . '][' . $sid . ']" value="' . esc_attr($val) . '" placeholder="https://example.com/staff" /></td>';
                 echo '</tr>';
             }
             echo '</tbody></table>';
             echo '</div>';
-        }
-    }
-
-    protected static function render_manual_order_section() : void {
-        $branches = get_option(self::OPTION_BRANCHES, array());
-        if (!is_array($branches)) {
-            $branches = array();
-        }
-        $order_map = yc_pa_get_manual_staff_order();
-        foreach ($branches as $branch) {
-            $cid = isset($branch['id']) ? (int) $branch['id'] : 0;
-            if ($cid <= 0) {
-                continue;
-            }
-            $label = isset($branch['title']) ? $branch['title'] : ('Company ' . $cid);
-            $key = (string) $cid;
-            $preset = '';
-            if (isset($order_map[$key]) && is_array($order_map[$key])) {
-                $pairs = $order_map[$key];
-                asort($pairs, SORT_NUMERIC);
-                $buf = array();
-                foreach ($pairs as $sid => $weight) {
-                    $buf[] = (int) $sid . '=' . (int) $weight;
-                }
-                $preset = implode(', ', $buf);
-            }
-            echo '<label class="yc-manual-order">';
-            echo '<span>' . esc_html($label) . ' (ID ' . $cid . ')</span>';
-            echo '<textarea name="yc_staff_order[' . $cid . ']" rows="3" placeholder="123=1, 456=5">' . esc_textarea($preset) . '</textarea>';
-            echo '</label>';
         }
     }
 
@@ -426,46 +393,29 @@ class YC_Admin {
     }
 
     public static function sanitize_staff_order($input) {
-        $out = array();
-        if (is_string($input)) {
-            $input = array('all' => $input);
-        }
         if (!is_array($input)) {
             return array();
         }
-        foreach ($input as $company_id => $line) {
+        foreach ($input as $company_id => $staff_map) {
             $company_id = (int) $company_id;
-            if ($company_id <= 0) {
+            if ($company_id <= 0 || !is_array($staff_map)) {
                 continue;
             }
-            if (!is_string($line)) {
-                continue;
-            }
-            $pairs = array();
-            $items = preg_split('/[,\n]+/', $line);
-            foreach ($items as $item) {
-                $item = trim($item);
-                if ($item === '') {
+            $orders = array();
+            foreach ($staff_map as $staff_id => $weight) {
+                $sid = (int) $staff_id;
+                if ($sid <= 0) {
                     continue;
                 }
-                if (strpos($item, '=') !== false) {
-                    list($sid, $weight) = array_map('trim', explode('=', $item, 2));
-                    $sid = (int) $sid;
-                    $weight = (int) $weight;
-                    if ($sid > 0) {
-                        $pairs[$sid] = $weight > 0 ? $weight : 9999;
-                    }
-                } else {
-                    $sid = (int) $item;
-                    if ($sid > 0) {
-                        $pairs[$sid] = count($pairs) + 1;
-                    }
+                if ($weight === '' || $weight === null) {
+                    continue;
                 }
+                $orders[$sid] = (int) $weight;
             }
-            if (!empty($pairs)) {
-                $out[$company_id] = $pairs;
+            if (!empty($orders)) {
+                YC_Repository::set_staff_sort_order($company_id, $orders);
             }
         }
-        return $out;
+        return yc_pa_get_manual_staff_order();
     }
 }

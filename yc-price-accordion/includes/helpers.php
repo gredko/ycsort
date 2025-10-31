@@ -80,27 +80,25 @@ function yc_get_staff_link($branch_id, $staff_id){
 }
 
 function yc_pa_get_manual_staff_order(){
-  $raw = get_option('yc_staff_order', array());
-  if (!is_array($raw)) {
+  $branches = yc_get_branches();
+  if (empty($branches)) {
     return array();
   }
 
   $out = array();
-  foreach ($raw as $company_id => $weights) {
-    if (!is_array($weights)) {
-      continue;
-    }
-    $company_id = (string) $company_id;
-    foreach ($weights as $staff_id => $weight) {
-      $sid = (int) $staff_id;
-      $w   = (int) $weight;
-      if ($sid <= 0) {
-        continue;
-      }
-      if (!isset($out[$company_id])) {
-        $out[$company_id] = array();
-      }
-      $out[$company_id][$sid] = $w > 0 ? $w : 9999;
+  foreach ($branches as $branch) {
+    $cid = isset($branch['id']) ? (int) $branch['id'] : 0;
+    if ($cid <= 0) continue;
+    $staff = YC_API::get_staff($cid);
+    if (empty($staff) || !is_array($staff)) continue;
+    $key = (string) $cid;
+    foreach ($staff as $st) {
+      if (!is_array($st)) continue;
+      $sid = isset($st['id']) ? (int) $st['id'] : (isset($st['staff_id']) ? (int) $st['staff_id'] : 0);
+      if ($sid <= 0) continue;
+      $weight = isset($st['sort_order']) ? (int) $st['sort_order'] : (isset($st['weight']) ? (int) $st['weight'] : 0);
+      if (!isset($out[$key])) $out[$key] = array();
+      $out[$key][$sid] = $weight;
     }
   }
 
