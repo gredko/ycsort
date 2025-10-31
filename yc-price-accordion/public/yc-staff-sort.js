@@ -1,19 +1,5 @@
 (function(){
   function norm(s){return (s||'').toString().trim().toLowerCase().replace(/\s+/g,' ');}
-  function toNum(v, def){ var n = parseFloat(v); return isFinite(n) ? n : def; }
-  function parsePriorityMap(raw){
-    var map = {}; if(!raw) return map; raw = raw.toString().trim(); if(!raw) return map;
-    try{ var obj = JSON.parse(raw); if(obj && typeof obj==='object'){ Object.keys(obj).forEach(function(k){ map[norm(k)] = toNum(obj[k], 1e9); }); return map; } }catch(e){}
-    raw.split(/\r?\n|,/).forEach(function(line){
-      var part = line.split('=');
-      if(part.length>=2){
-        var name = norm(part[0]);
-        var pr = toNum(part.slice(1).join('='), 1e9);
-        if(name){ map[name] = pr; }
-      }
-    });
-    return map;
-  }
 
   document.addEventListener('DOMContentLoaded', function(){
     try{
@@ -22,13 +8,9 @@
       var adminOrderMap = {}; adminOrderRaw.split(/\r?\n|,/).forEach(function(line){ var p=line.split('='); if(p.length>=2){ var n=(p[0]||'').trim().toLowerCase().replace(/\s+/g,' '); var v=parseFloat(p.slice(1).join('=')); if(n&&isFinite(v)) adminOrderMap[n]=v; }});
       var alphaRest = !!cfg.alphaRest;
       var orderRaw = (cfg.order||'').toString();
-      var priorityRaw = (cfg.priority||'').toString();
 
       var orderList = orderRaw.split(/\r?\n|,/).map(function(x){return norm(x);}).filter(Boolean);
       var orderWeight = {}; orderList.forEach(function(name,i){ orderWeight[name]=i; });
-
-      var pmap = parsePriorityMap(priorityRaw);
-      var hasPriority = Object.keys(pmap).length>0;
 
       document.querySelectorAll('.yc-staff-grid').forEach(function(grid){
         var cards = Array.prototype.slice.call(grid.querySelectorAll('.yc-staff-card'));
@@ -46,9 +28,6 @@
           var aadmin = (an in adminOrderMap) ? adminOrderMap[an] : 1e9;
           var badmin = (bn in adminOrderMap) ? adminOrderMap[bn] : 1e9;
           if(aadmin!==badmin) return aadmin - badmin;
-          var ap = hasPriority ? (an in pmap ? pmap[an] : 1e9) : 1e9;
-          var bp = hasPriority ? (bn in pmap ? pmap[bn] : 1e9) : 1e9;
-          if(ap!==bp) return ap - bp;
 
           var ai = (an in orderWeight) ? orderWeight[an] : 1e9;
           var bi = (bn in orderWeight) ? orderWeight[bn] : 1e9;

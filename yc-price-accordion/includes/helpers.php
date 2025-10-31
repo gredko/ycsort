@@ -123,31 +123,6 @@ function yc_pa_get_global_staff_order(){
   return $global;
 }
 
-function yc_pa_parse_priority_map($raw){
-  if (!is_string($raw) || $raw === '') {
-    return array();
-  }
-  $map = array();
-  $lines = preg_split('/[\r\n]+/', $raw);
-  foreach ($lines as $line) {
-    $line = trim($line);
-    if ($line === '' || strpos($line, '=') === false) {
-      continue;
-    }
-    list($name, $weight) = array_map('trim', explode('=', $line, 2));
-    if ($name === '') {
-      continue;
-    }
-    $key = yc_normalize_name($name);
-    if ($key === '') {
-      continue;
-    }
-    $map[$key] = max(1, (int) $weight);
-  }
-  return $map;
-}
-
-
 function yc_sanitize_position($pos){
   // Accept string or array; remove purely numeric tokens (branch IDs etc), trim, collapse duplicates
   if (is_array($pos)) {
