@@ -112,6 +112,8 @@ jQuery(function($){
       const body = Object.assign({
         company_id: branch.id
       }, payload || {});
+      const jsonBody = JSON.stringify(body);
+      appendLog(branchName + ': -> ' + jsonBody);
       const resp = await fetch(syncConfig.restUrl, {
         method: 'POST',
         credentials: 'same-origin',
@@ -119,13 +121,28 @@ jQuery(function($){
           'Content-Type': 'application/json',
           'X-WP-Nonce': syncConfig.nonce || ''
         },
-        body: JSON.stringify(body)
+        body: jsonBody
       });
+      const responseText = await resp.text();
+      const formatResponse = function(text){
+        const value = typeof text === 'string' ? text : (text ? String(text) : '');
+        return value.length > 500 ? value.slice(0, 500) + '…' : value;
+      };
+      appendLog(branchName + ': <- HTTP ' + resp.status + ' ' + formatResponse(responseText), resp.ok ? '' : 'error');
       if (!resp.ok){
         throw new Error('HTTP ' + resp.status);
       }
-      const json = await resp.json();
+      let json = null;
+      if (responseText){
+        try {
+          json = JSON.parse(responseText);
+        } catch (e){
+          appendLog(branchName + ': <- JSON parse error: ' + e.message, 'error');
+          throw new Error('HTTP ' + resp.status + ' (invalid JSON)');
+        }
+      }
       if (json && json.code){
+        appendLog(branchName + ': <- API error: ' + (json.message || json.code), 'error');
         throw new Error(json.message || json.code);
       }
       if (json && json.result && Array.isArray(json.result.errors) && json.result.errors.length){
