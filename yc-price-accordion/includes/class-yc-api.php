@@ -101,6 +101,47 @@ class YC_API {
         return isset($json['data']) && is_array($json['data']) ? $json['data'] : array();
     }
 
+    public static function fetch_services_page(int $company_id, int $page = 1, int $limit = 50) {
+        $page  = max(1, (int) $page);
+        $limit = max(1, min(200, (int) $limit));
+        $json = self::request(
+            '/company/' . $company_id . '/services',
+            array(
+                'page'  => $page,
+                'count' => $limit,
+            )
+        );
+        if (isset($json['error'])) {
+            return $json;
+        }
+        $data = isset($json['data']) && is_array($json['data']) ? $json['data'] : array();
+        $meta = array();
+        if (isset($json['meta']) && is_array($json['meta'])) {
+            $meta = $json['meta'];
+        }
+        if (!isset($meta['total'])) {
+            if (isset($json['total'])) {
+                $meta['total'] = (int) $json['total'];
+            } elseif (isset($json['meta']) && is_array($json['meta']) && isset($json['meta']['count'])) {
+                $meta['total'] = (int) $json['meta']['count'];
+            } elseif (isset($json['count'])) {
+                $meta['total'] = (int) $json['count'];
+            } elseif (isset($json['pagination']) && is_array($json['pagination']) && isset($json['pagination']['total'])) {
+                $meta['total'] = (int) $json['pagination']['total'];
+            } else {
+                $meta['total'] = null;
+            }
+        } else {
+            $meta['total'] = (int) $meta['total'];
+        }
+        $meta['page']  = $page;
+        $meta['limit'] = $limit;
+        return array(
+            'data' => $data,
+            'meta' => $meta,
+        );
+    }
+
     public static function fetch_staff_remote(int $company_id) {
         $resp = self::request('/company/' . $company_id . '/staff');
         if (isset($resp['error'])) {

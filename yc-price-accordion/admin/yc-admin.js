@@ -88,39 +88,145 @@ jQuery(function($){
     return await resp.json();
   }
 
+  const t = function(key, fallback){
+    if (syncConfig.i18n && syncConfig.i18n[key]){
+      return syncConfig.i18n[key];
+    }
+    return fallback;
+  };
+
   async function syncBranch(branch, index, total){
-    const body = {
-      mode: 'branch',
-      company_id: branch.id,
-      download_photos: true
-    };
-    const resp = await fetch(syncConfig.restUrl, {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-WP-Nonce': syncConfig.nonce || ''
-      },
-      body: JSON.stringify(body)
-    });
-    if (!resp.ok){
-      throw new Error('HTTP ' + resp.status);
-    }
-    const json = await resp.json();
     const branchName = branch.title || ('ID ' + branch.id);
-    const done = index + 1;
-    const percent = Math.round((done / total) * 100);
-    const stats = json.result && json.result.stats ? json.result.stats : {};
-    const errors = json.result && json.result.errors ? json.result.errors : [];
-    let message = branchName + ': ' + (stats.services || 0) + ' services, ' + (stats.staff || 0) + ' staff';
-    if (errors && errors.length){
-      message += ' — ' + errors.join('; ');
-      appendLog(message, 'error');
-    } else {
-      appendLog(message, 'success');
+    const staffPhotoBatch = parseInt(syncConfig.staffPhotosBatch, 10) || 5;
+    const servicesBatch = parseInt(syncConfig.servicesBatch, 10) || 50;
+    let branchProgress = 0;
+    const errors = [];
+
+    const updateProgress = function(progress, message){
+      branchProgress = Math.max(branchProgress, Math.min(1, progress));
+      const percent = Math.round(((index + branchProgress) / total) * 100);
+      setProgress(percent, message);
+    };
+
+    const request = async function(payload){
+      const body = Object.assign({
+        company_id: branch.id
+      }, payload || {});
+      const resp = await fetch(syncConfig.restUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-WP-Nonce': syncConfig.nonce || ''
+        },
+        body: JSON.stringify(body)
+      });
+      if (!resp.ok){
+        throw new Error('HTTP ' + resp.status);
+      }
+      const json = await resp.json();
+      if (json && json.code){
+        throw new Error(json.message || json.code);
+      }
+      if (json && json.result && Array.isArray(json.result.errors) && json.result.errors.length){
+        errors.push.apply(errors, json.result.errors);
+      }
+      return json;
+    };
+
+    updateProgress(0, branchName + ': ' + t('stageStart', 'Подготовка…'));
+
+    const staffList = await request({
+      mode: 'staff_list'
+    });
+    const staffStats = (staffList.result && staffList.result.stats) ? staffList.result.stats : {};
+    const staffCount = staffStats.staff || 0;
+    updateProgress(0.2, branchName + ': ' + t('stageStaffListDone', 'Сотрудники обновлены') + ' (' + staffCount + ')');
+
+    let photosProcessed = 0;
+    let staffOffset = 0;
+    let staffTotal = staffList.result && staffList.result.state && typeof staffList.result.state.total !== 'undefined'
+      ? staffList.result.state.total
+      : staffCount;
+    if (!staffTotal || staffTotal < staffCount){
+      staffTotal = staffCount;
     }
-    setProgress(percent, message);
-    return json;
+
+    let staffDone = staffTotal === 0;
+    while (!staffDone){
+      const photoResp = await request({
+        mode: 'staff_photos',
+        offset: staffOffset,
+        limit: staffPhotoBatch
+      });
+      const state = photoResp.result && photoResp.result.state ? photoResp.result.state : {};
+      const processed = state.processed || 0;
+      photosProcessed += processed;
+      staffOffset = typeof state.next_offset !== 'undefined' ? state.next_offset : (staffOffset + processed);
+      if (typeof state.total !== 'undefined' && state.total !== null){
+        staffTotal = state.total;
+      }
+      const completed = typeof state.completed !== 'undefined' ? state.completed : staffOffset;
+      const denominator = staffTotal && staffTotal > 0 ? staffTotal : (completed > 0 ? completed : 1);
+      const ratio = Math.min(1, denominator ? completed / denominator : 1);
+      updateProgress(0.2 + 0.3 * ratio, branchName + ': ' + t('stageStaffPhotos', 'Загрузка фото сотрудников') + ' (' + completed + '/' + (denominator || '?') + ')');
+      staffDone = !!state.done || processed === 0 || (staffTotal && staffOffset >= staffTotal);
+    }
+
+    updateProgress(0.5, branchName + ': ' + t('stageStaffPhotosDone', 'Фото сотрудников обновлены') + ' (' + photosProcessed + ')');
+
+    const servicesInit = await request({
+      mode: 'services_init',
+      limit: servicesBatch
+    });
+    let servicesState = servicesInit.result && servicesInit.result.state ? servicesInit.result.state : {};
+    let servicesTotal = typeof servicesState.total !== 'undefined' && servicesState.total !== null ? servicesState.total : null;
+    let servicesProcessed = typeof servicesState.completed !== 'undefined' ? servicesState.completed : (servicesInit.result && servicesInit.result.stats && servicesInit.result.stats.services ? servicesInit.result.stats.services : 0);
+    const updateServicesProgress = function(){
+      const totalValue = servicesTotal && servicesTotal > 0 ? servicesTotal : (servicesProcessed > 0 ? servicesProcessed : 1);
+      const ratio = Math.min(1, totalValue ? servicesProcessed / totalValue : 1);
+      updateProgress(0.5 + 0.5 * ratio, branchName + ': ' + t('stageServices', 'Загрузка услуг') + ' (' + servicesProcessed + '/' + (totalValue || '?') + ')');
+    };
+    updateServicesProgress();
+
+    let hasMore = !!servicesState.has_more;
+    let nextPage = servicesState.next_page || (hasMore ? 2 : null);
+
+    while (hasMore && nextPage){
+      const batchResp = await request({
+        mode: 'services_batch',
+        page: nextPage,
+        limit: servicesBatch
+      });
+      servicesState = batchResp.result && batchResp.result.state ? batchResp.result.state : {};
+      if (typeof servicesState.total !== 'undefined' && servicesState.total !== null){
+        servicesTotal = servicesState.total;
+      }
+      if (typeof servicesState.completed !== 'undefined'){
+        servicesProcessed = servicesState.completed;
+      } else {
+        servicesProcessed += servicesState.processed || 0;
+      }
+      updateServicesProgress();
+      hasMore = !!servicesState.has_more;
+      nextPage = servicesState.next_page || (hasMore ? (nextPage + 1) : null);
+    }
+
+    updateProgress(1, branchName + ': ' + t('stageDone', 'Синхронизация завершена'));
+
+    const summary = branchName + ': ' + (servicesProcessed || 0) + ' ' + t('labelServices', 'услуг') + ', ' + (staffCount || 0) + ' ' + t('labelStaff', 'сотрудников') + ', ' + (photosProcessed || 0) + ' ' + t('labelPhotos', 'фото');
+    if (errors.length){
+      appendLog(summary + ' — ' + errors.join('; '), 'error');
+    } else {
+      appendLog(summary, 'success');
+    }
+
+    return {
+      staff: staffCount,
+      photos: photosProcessed,
+      services: servicesProcessed,
+      errors: errors
+    };
   }
 
   if ($syncButton.length){
