@@ -6,6 +6,7 @@ if (!defined('ABSPATH')) {
 class YC_Repository {
     const VERSION = '1.0.0';
     const OPTION_VERSION = 'yc_pa_repository_version';
+    const SERVICE_SYNC_OPTION_PREFIX = 'yc_pa_service_sync_';
 
     public static function init() : void {
         add_action('plugins_loaded', [__CLASS__, 'maybe_upgrade']);
@@ -344,6 +345,298 @@ class YC_Repository {
             $wpdb->query($wpdb->prepare("DELETE FROM $table WHERE company_id = %d AND staff_id NOT IN ($placeholders)", $params));
         }
         return array('total' => count($ids));
+    }
+
+    public static function get_staff_batch(int $company_id, int $offset, int $limit) : array {
+        global $wpdb;
+        $table = self::table_staff();
+        $offset = max(0, (int) $offset);
+        $limit  = max(1, (int) $limit);
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT * FROM $table WHERE company_id = %d ORDER BY staff_id ASC LIMIT %d OFFSET %d",
+                $company_id,
+                $limit,
+                $offset
+            ),
+            ARRAY_A
+        );
+        $total = (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT COUNT(*) FROM $table WHERE company_id = %d",
+                $company_id
+            )
+        );
+
+        return array(
+            'rows'  => is_array($rows) ? $rows : array(),
+            'total' => $total,
+        );
+    }
+
+    public static function update_staff_images(int $company_id, array $image_map) : void {
+        if (empty($image_map)) {
+            return;
+        }
+
+        global $wpdb;
+        $table = self::table_staff();
+        $now   = self::now();
+
+        foreach ($image_map as $staff_id => $image) {
+            $sid = (int) $staff_id;
+            if ($sid <= 0 || !is_array($image)) {
+                continue;
+            }
+            $data = array(
+                'image_id'   => isset($image['id']) ? (int) $image['id'] : 0,
+                'image_url'  => isset($image['url']) ? (string) $image['url'] : '',
+                'image_hash' => isset($image['hash']) ? (string) $image['hash'] : '',
+                'updated_at' => $now,
+            );
+            $where = array(
+                'company_id' => $company_id,
+                'staff_id'   => $sid,
+            );
+            $wpdb->update(
+                $table,
+                $data,
+                $where,
+                array('%d','%s','%s','%s'),
+                array('%d','%d')
+            );
+        }
+    }
+
+    protected static function service_sync_option(int $company_id) : string {
+        return self::SERVICE_SYNC_OPTION_PREFIX . $company_id;
+    }
+
+    public static function begin_service_sync(int $company_id) : void {
+        $option = array(
+            'ids'       => array(),
+            'processed' => 0,
+            'total'     => null,
+        );
+        update_option(self::service_sync_option($company_id), $option, false);
+    }
+
+    public static function append_service_sync_ids(int $company_id, array $service_ids) : array {
+        $option = get_option(self::service_sync_option($company_id), array());
+        if (!isset($option['ids']) || !is_array($option['ids'])) {
+            $option['ids'] = array();
+        }
+        foreach ($service_ids as $id) {
+            $sid = (int) $id;
+            if ($sid <= 0) {
+                continue;
+            }
+            $option['ids'][$sid] = true;
+        }
+        $option['processed'] = count($option['ids']);
+        update_option(self::service_sync_option($company_id), $option, false);
+        return array(
+            'processed' => $option['processed'],
+            'total'     => isset($option['total']) ? $option['total'] : null,
+        );
+    }
+
+    public static function set_service_sync_total(int $company_id, ?int $total) : void {
+        $option = get_option(self::service_sync_option($company_id), array());
+        if (!is_array($option)) {
+            $option = array();
+        }
+        if (!isset($option['ids']) || !is_array($option['ids'])) {
+            $option['ids'] = array();
+        }
+        $option['processed'] = isset($option['processed']) ? (int) $option['processed'] : count($option['ids']);
+        $option['total'] = is_null($total) ? null : (int) $total;
+        update_option(self::service_sync_option($company_id), $option, false);
+    }
+
+    public static function get_service_sync_state(int $company_id) : array {
+        $option = get_option(self::service_sync_option($company_id), array());
+        if (!is_array($option)) {
+            $option = array();
+        }
+        if (!isset($option['ids']) || !is_array($option['ids'])) {
+            $option['ids'] = array();
+        }
+        if (!isset($option['processed']) || !is_numeric($option['processed'])) {
+            $option['processed'] = count($option['ids']);
+        }
+        if (!array_key_exists('total', $option)) {
+            $option['total'] = null;
+        }
+        return $option;
+    }
+
+    public static function complete_service_sync(int $company_id) : void {
+        $state = self::get_service_sync_state($company_id);
+        $ids = array();
+        foreach ($state['ids'] as $id => $flag) {
+            $sid = (int) $id;
+            if ($sid > 0) {
+                $ids[] = $sid;
+            }
+        }
+        self::cleanup_services($company_id, $ids);
+        delete_option(self::service_sync_option($company_id));
+    }
+
+    public static function store_services_partial(int $company_id, array $services, bool $reset_relations = false) : array {
+        global $wpdb;
+        $table = self::table_services();
+        $now   = self::now();
+        $ids   = array();
+        $relations = array();
+
+        foreach ($services as $service) {
+            if (!is_array($service)) {
+                continue;
+            }
+            $service_id = isset($service['id']) ? (int) $service['id'] : 0;
+            if ($service_id <= 0) {
+                continue;
+            }
+            $ids[] = $service_id;
+
+            $category_id = 0;
+            $category_name = '';
+            if (isset($service['category_id'])) {
+                $category_id = (int) $service['category_id'];
+            } elseif (isset($service['categoryId'])) {
+                $category_id = (int) $service['categoryId'];
+            } elseif (isset($service['category']['id'])) {
+                $category_id = (int) $service['category']['id'];
+            }
+            if (isset($service['category']['title'])) {
+                $category_name = (string) $service['category']['title'];
+            } elseif (isset($service['category']['name'])) {
+                $category_name = (string) $service['category']['name'];
+            } elseif (isset($service['category_name'])) {
+                $category_name = (string) $service['category_name'];
+            }
+
+            $price_min = isset($service['price_min']) ? (float) $service['price_min'] : (isset($service['cost_min']) ? (float) $service['cost_min'] : 0.0);
+            $price_max = isset($service['price_max']) ? (float) $service['price_max'] : (isset($service['cost_max']) ? (float) $service['cost_max'] : $price_min);
+            $duration  = isset($service['duration']) ? (int) $service['duration'] : (isset($service['length']) ? (int) $service['length'] : 0);
+            $title     = isset($service['title']) ? (string) $service['title'] : (isset($service['name']) ? (string) $service['name'] : '');
+            $description = isset($service['comment']) ? (string) $service['comment'] : (isset($service['description']) ? (string) $service['description'] : '');
+            $is_active = isset($service['active']) ? (int) !!$service['active'] : 1;
+            $sort      = isset($service['weight']) ? (int) $service['weight'] : (isset($service['sort_order']) ? (int) $service['sort_order'] : 0);
+
+            $wpdb->replace(
+                $table,
+                array(
+                    'company_id'    => $company_id,
+                    'service_id'    => $service_id,
+                    'category_id'   => $category_id,
+                    'category_name' => $category_name,
+                    'title'         => $title,
+                    'description'   => $description,
+                    'price_min'     => $price_min,
+                    'price_max'     => $price_max,
+                    'duration'      => $duration,
+                    'raw_data'      => wp_json_encode($service),
+                    'is_active'     => $is_active,
+                    'sort_order'    => $sort,
+                    'updated_at'    => $now,
+                ),
+                array('%d','%d','%d','%s','%s','%f','%f','%d','%s','%d','%d','%s')
+            );
+
+            if (!empty($service['staff']) && is_array($service['staff'])) {
+                foreach ($service['staff'] as $staff) {
+                    $sid = 0;
+                    if (is_array($staff)) {
+                        $sid = isset($staff['id']) ? (int) $staff['id'] : 0;
+                    } elseif (is_numeric($staff)) {
+                        $sid = (int) $staff;
+                    }
+                    if ($sid > 0) {
+                        if (!isset($relations[$service_id])) {
+                            $relations[$service_id] = array();
+                        }
+                        $relations[$service_id][$sid] = true;
+                    }
+                }
+            }
+        }
+
+        self::store_service_relations_partial($company_id, $relations, $reset_relations);
+
+        $state = self::append_service_sync_ids($company_id, $ids);
+
+        $relation_count = 0;
+        foreach ($relations as $staff_map) {
+            if (is_array($staff_map)) {
+                $relation_count += count($staff_map);
+            }
+        }
+
+        return array(
+            'processed' => count($ids),
+            'relations' => $relation_count,
+            'state'     => $state,
+        );
+    }
+
+    protected static function store_service_relations_partial(int $company_id, array $map, bool $reset = false) : void {
+        global $wpdb;
+        $table = self::table_service_staff();
+        if ($reset) {
+            $wpdb->delete($table, array('company_id' => $company_id), array('%d'));
+        }
+        foreach ($map as $service_id => $staff_map) {
+            if (!is_array($staff_map)) {
+                continue;
+            }
+            foreach (array_keys($staff_map) as $staff_id) {
+                $sid = (int) $staff_id;
+                if ($sid <= 0) {
+                    continue;
+                }
+                $wpdb->replace(
+                    $table,
+                    array(
+                        'company_id' => $company_id,
+                        'service_id' => (int) $service_id,
+                        'staff_id'   => $sid,
+                    ),
+                    array('%d','%d','%d')
+                );
+            }
+        }
+    }
+
+    public static function cleanup_services(int $company_id, array $keep_ids) : void {
+        global $wpdb;
+        $services = self::table_services();
+        $pivot    = self::table_service_staff();
+
+        if (empty($keep_ids)) {
+            $wpdb->delete($services, array('company_id' => $company_id), array('%d'));
+            $wpdb->delete($pivot, array('company_id' => $company_id), array('%d'));
+            return;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($keep_ids), '%d'));
+        $params = array_merge(array($company_id), $keep_ids);
+
+        $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM $services WHERE company_id = %d AND service_id NOT IN ($placeholders)",
+                $params
+            )
+        );
+
+        $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM $pivot WHERE company_id = %d AND service_id NOT IN ($placeholders)",
+                $params
+            )
+        );
     }
 
     public static function get_categories(int $company_id) : array {
