@@ -263,6 +263,9 @@ class YC_Sync_Service {
         $reset_relations = $initial && $page === 1;
         $stored = YC_Repository::store_services_partial($company_id, $services, $reset_relations);
         $state  = isset($stored['state']) ? $stored['state'] : YC_Repository::get_service_sync_state($company_id);
+        if (isset($state['processed_delta'])) {
+            unset($state['processed_delta']);
+        }
         if (isset($state['ids'])) {
             unset($state['ids']);
         }
