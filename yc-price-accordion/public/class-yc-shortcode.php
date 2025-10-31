@@ -24,6 +24,70 @@ class YC_Shortcode {
     }
   }
 
+  private static function format_service_price_text(array $service){
+    $pmin = isset($service['price_min']) ? (float) $service['price_min'] : (isset($service['price']) ? (float) $service['price'] : 0.0);
+    $pmax = isset($service['price_max']) ? (float) $service['price_max'] : $pmin;
+
+    if ($pmin <= 0 && $pmax <= 0) {
+      return '—';
+    }
+
+    $format = static function($value) {
+      $decimals = abs($value - round($value)) > 0.001 ? 2 : 0;
+      return number_format($value, $decimals, ',', ' ');
+    };
+
+    if ($pmin > 0 && $pmax > 0 && abs($pmax - $pmin) >= 0.01) {
+      return $format($pmin) . '–' . $format($pmax) . ' ₽';
+    }
+
+    $single = $pmax > 0 ? $pmax : $pmin;
+    return $format($single) . ' ₽';
+  }
+
+  private static function extract_service_category_name(array $service){
+    $candidates = array('category_label', 'category_title', 'category_name', 'categoryName', 'categoryTitle', 'group', 'group_name', 'group_title');
+    foreach ($candidates as $key) {
+      if (!empty($service[$key]) && is_string($service[$key])) {
+        return wp_strip_all_tags($service[$key]);
+      }
+    }
+    if (!empty($service['category']) && is_array($service['category'])) {
+      foreach ($candidates as $key) {
+        if (!empty($service['category'][$key]) && is_string($service['category'][$key])) {
+          return wp_strip_all_tags($service['category'][$key]);
+        }
+      }
+      if (!empty($service['category']['title'])) {
+        return wp_strip_all_tags($service['category']['title']);
+      }
+      if (!empty($service['category']['name'])) {
+        return wp_strip_all_tags($service['category']['name']);
+      }
+    }
+    return '';
+  }
+
+  private static function resolve_category_name($category_id, array $items, array $map){
+    $cat_id = (int) $category_id;
+    if ($cat_id === 0) {
+      return __('Без категории', 'yc-price-accordion');
+    }
+    if (isset($map[$cat_id]) && $map[$cat_id] !== '') {
+      return $map[$cat_id];
+    }
+    foreach ($items as $svc) {
+      if (!is_array($svc)) {
+        continue;
+      }
+      $name = self::extract_service_category_name($svc);
+      if ($name !== '') {
+        return $name;
+      }
+    }
+    return sprintf(__('Категория #%d', 'yc-price-accordion'), $cat_id);
+  }
+
   private static function render_staff_grid($branches, $filter_branch, $filter_single, $filter_multi){
     $groups = array();
     $use_filter = ($filter_single || !empty($filter_multi));
@@ -332,34 +396,13 @@ class YC_Shortcode {
         if(!$hasStaff) continue;
         if (!isset($grouped[$cat_id])) $grouped[$cat_id] = array('category_id'=>$cat_id,'items'=>array());
         $svc['company_id'] = $cid; $svc['company_title'] = $b['title']; $svc['branch'] = $b;
+        $svc['display_price'] = self::format_service_price_text($svc);
         $grouped[$cat_id]['items'][] = $svc;
       }
       $categories=array();
       foreach($grouped as $cat_id=>$row){
-        $cat_name = '';
-        if ($cat_id === 0) {
-          $cat_name = 'Без категории';
-        }
-        if ($cat_name === '' && isset($cats[$cat_id]) && $cats[$cat_id] !== '') {
-          $cat_name = $cats[$cat_id];
-        }
-        if ($cat_name === '' && !empty($row['items']) && is_array($row['items'])) {
-          foreach ($row['items'] as $svc_row) {
-            if (!is_array($svc_row)) continue;
-            if (!empty($svc_row['category']) && is_array($svc_row['category'])) {
-              if (!empty($svc_row['category']['title'])) { $cat_name = (string) $svc_row['category']['title']; break; }
-              if (!empty($svc_row['category']['name'])) { $cat_name = (string) $svc_row['category']['name']; break; }
-            }
-            if (!empty($svc_row['category_name'])) { $cat_name = (string) $svc_row['category_name']; break; }
-          }
-        }
-        if ($cat_name === '') {
-          $cat_name = 'Категория #' . $cat_id;
-        }
+        $cat_name = self::resolve_category_name($cat_id, isset($row['items']) ? $row['items'] : array(), $cats);
         $cat_label = $cat_name;
-        if ($cat_id > 0 && stripos($cat_label, '#' . $cat_id) === false) {
-          $cat_label .= ' · #' . $cat_id;
-        }
         $categories[] = array(
           'category_id'    => $cat_id,
           'category_name'  => $cat_name,
@@ -411,25 +454,15 @@ class YC_Shortcode {
           echo '<div class="yc-cat" data-category="'.esc_attr($cat['category_id']).'">';
           $cat_label = isset($cat['category_label']) ? $cat['category_label'] : (isset($cat['category_name']) ? $cat['category_name'] : 'Категория');
           echo '<div class="yc-cat-title">'.esc_html($cat_label).($total>$page?' · <span class="yc-cat-count">'.intval($total).'</span>':'').'</div>';
-          echo '<ul class="yc-services"'.(!empty($rest)?' data-rest="'.esc_attr(json_encode($rest)).'"':'').'>';
+          $rest_attr = '';
+          if (!empty($rest)) {
+            $rest_attr = ' data-rest="' . esc_attr(wp_json_encode($rest, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"';
+          }
+          echo '<ul class="yc-services"'.$rest_attr.'>';
           foreach($initial as $svc){
             $name = isset($svc['title'])?$svc['title']:(isset($svc['name'])?$svc['name']:'');
             $sid  = intval(isset($svc['id'])?$svc['id']:0);
-            $pmin = floatval(isset($svc['price_min'])?$svc['price_min']:(isset($svc['price'])?$svc['price']:0));
-            $pmax = floatval(isset($svc['price_max'])?$svc['price_max']:0);
-            $format_price = static function($value) {
-              $decimals = abs($value - round($value)) > 0.001 ? 2 : 0;
-              return number_format($value, $decimals, ',', ' ');
-            };
-            $price_txt = '—';
-            if ($pmin > 0 || $pmax > 0) {
-              if ($pmin > 0 && $pmax > 0 && abs($pmax - $pmin) >= 0.01) {
-                $price_txt = $format_price($pmin).'–'.$format_price($pmax).' ₽';
-              } else {
-                $single = $pmax > 0 ? $pmax : $pmin;
-                $price_txt = $format_price($single).' ₽';
-              }
-            }
+            $price_txt = isset($svc['display_price']) ? $svc['display_price'] : self::format_service_price_text($svc);
             $branch_arr = isset($svc['branch'])?$svc['branch']:array('id'=>intval($svc['company_id']));
             $book_url = yc_pa_build_booking_url($branch_arr, intval($svc['company_id']), $sid);
             echo '<li class="yc-service"><div class="yc-service-row"><div class="yc-service-name">'.esc_html($name).'</div><div class="yc-service-right"><div class="yc-service-price">'.esc_html($price_txt).'</div>';

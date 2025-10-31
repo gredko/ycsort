@@ -167,14 +167,14 @@ function yc_normalize_name($name){
 
 function yc_pa_get_staff_sort_order($staff){
   if (!is_array($staff)) return 500;
-  if (isset($staff['manual_order']) && $staff['manual_order'] !== '' && $staff['manual_order'] !== null) {
-    if (is_numeric($staff['manual_order'])) return (int) $staff['manual_order'];
-  }
-  if (isset($staff['sort_order']) && $staff['sort_order'] !== '' && $staff['sort_order'] !== null) {
-    if (is_numeric($staff['sort_order'])) return (int) $staff['sort_order'];
-  }
-  if (isset($staff['weight']) && $staff['weight'] !== '' && $staff['weight'] !== null) {
-    if (is_numeric($staff['weight'])) return (int) $staff['weight'];
+  $keys = array('manual_order', 'sort_order', 'weight', 'order', 'manualOrder', 'sortOrder');
+  foreach ($keys as $key) {
+    if (!isset($staff[$key])) continue;
+    $value = $staff[$key];
+    if ($value === '' || $value === null) continue;
+    if (!is_numeric($value)) continue;
+    $int = (int) $value;
+    if ($int > 0) return $int;
   }
   return 500;
 }
