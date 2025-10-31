@@ -76,7 +76,6 @@ final class YC_Price_Accordion_Pro {
 
         if (is_admin()) {
             require_once YC_PA_DIR . 'admin/class-yc-admin.php';
-            require_once YC_PA_DIR . 'admin/class-yc-admin-priority.php';
         }
     }
 
@@ -93,8 +92,12 @@ final class YC_Price_Accordion_Pro {
             YC_Admin::init();
         }
 
-        if (class_exists('YC_Admin_Priority')) {
-            YC_Admin_Priority::init();
+        if (class_exists('YC_Sync_Controller') && function_exists('register_rest_route')) {
+            YC_Sync_Controller::init();
+        }
+
+        if (class_exists('YC_Admin')) {
+            YC_Admin::init();
         }
 
         if (class_exists('YC_Shortcode')) {
