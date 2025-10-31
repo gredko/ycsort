@@ -307,6 +307,7 @@ class YC_Repository {
         $table = self::table_staff();
         $now   = self::now();
         $ids   = array();
+        $existing_orders = self::get_existing_staff_orders($company_id);
         foreach ($staff as $row) {
             if (!is_array($row)) {
                 continue;
@@ -316,13 +317,8 @@ class YC_Repository {
                 continue;
             }
             $ids[] = $staff_id;
-            $sort_order = null;
-            if (isset($row['sort_order']) && $row['sort_order'] !== null && $row['sort_order'] !== '') {
-                $sort_order = (int) $row['sort_order'];
-            } elseif (isset($row['weight']) && $row['weight'] !== null && $row['weight'] !== '') {
-                $sort_order = (int) $row['weight'];
-            }
-            if ($sort_order === null) {
+            $sort_order = isset($existing_orders[$staff_id]) ? (int) $existing_orders[$staff_id] : null;
+            if ($sort_order === null || $sort_order === 0) {
                 $sort_order = 500;
             }
             $data = array(
@@ -355,6 +351,29 @@ class YC_Repository {
             $wpdb->query($wpdb->prepare("DELETE FROM $table WHERE company_id = %d AND staff_id NOT IN ($placeholders)", $params));
         }
         return array('total' => count($ids));
+    }
+
+    protected static function get_existing_staff_orders(int $company_id) : array {
+        global $wpdb;
+        $table = self::table_staff();
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT staff_id, sort_order FROM $table WHERE company_id = %d",
+                $company_id
+            ),
+            ARRAY_A
+        );
+        $map = array();
+        if (is_array($rows)) {
+            foreach ($rows as $row) {
+                $sid = isset($row['staff_id']) ? (int) $row['staff_id'] : 0;
+                if ($sid <= 0) {
+                    continue;
+                }
+                $map[$sid] = isset($row['sort_order']) ? (int) $row['sort_order'] : 0;
+            }
+        }
+        return $map;
     }
 
     public static function get_staff_batch(int $company_id, int $offset, int $limit) : array {
