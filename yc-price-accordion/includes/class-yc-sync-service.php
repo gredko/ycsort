@@ -4,8 +4,7 @@ if (!defined('ABSPATH')) {
 }
 
 class YC_Sync_Service {
-    public static function sync_company($company_id, $args = array()) {
-        $company_id = (int) $company_id;
+    public static function sync_company(int $company_id, array $args = array()) : array {
         $result = array(
             'categories' => false,
             'services'   => false,
@@ -20,10 +19,7 @@ class YC_Sync_Service {
         if (isset($categories_resp['error'])) {
             $result['errors'][] = 'categories: ' . $categories_resp['error'];
         } else {
-            $raw_categories = array();
-            if (isset($categories_resp['raw']) && is_array($categories_resp['raw'])) {
-                $raw_categories = $categories_resp['raw'];
-            }
+            $raw_categories = isset($categories_resp['raw']) && is_array($categories_resp['raw']) ? $categories_resp['raw'] : array();
             YC_Repository::store_categories($company_id, $raw_categories);
             $result['categories'] = true;
             $result['stats']['categories'] = count($raw_categories);
@@ -65,15 +61,13 @@ class YC_Sync_Service {
 
         if ($result['categories'] || $result['services'] || $result['staff']) {
             update_option('yc_pa_last_sync', time(), false);
+            update_option(YC_Admin::OPTION_LAST_SYNC, time(), false);
         }
 
         return $result;
     }
 
-    protected static function extract_staff_from_services($services) {
-        if (!is_array($services)) {
-            return array();
-        }
+    protected static function extract_staff_from_services(array $services) : array {
         $map = array();
         foreach ($services as $service) {
             if (!is_array($service) || empty($service['staff']) || !is_array($service['staff'])) {
@@ -102,12 +96,7 @@ class YC_Sync_Service {
         return $map;
     }
 
-    protected static function store_staff($company_id, $staff_rows, $download_photos) {
-        $company_id   = (int) $company_id;
-        $download_photos = (bool) $download_photos;
-        if (!is_array($staff_rows)) {
-            $staff_rows = array();
-        }
+    protected static function store_staff(int $company_id, array $staff_rows, bool $download_photos) : array {
         $existing = YC_Repository::get_staff_index($company_id);
         $normalized = array();
         $images = array();
