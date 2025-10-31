@@ -53,7 +53,6 @@ class YC_Shortcode {
     $by_name = array();
     $use_filter = ($filter_single || !empty($filter_multi));
     $manual_global = yc_pa_get_global_staff_order();
-    $priority_map  = yc_pa_parse_priority_map(get_option('yc_staff_admin_order_map', ''));
 
     $link_branches = $branches;
     if ($filter_branch) {
@@ -169,7 +168,6 @@ class YC_Shortcode {
         }
 
         $manual_weight = isset($manual_global[$sid]) ? (int) $manual_global[$sid] : null;
-        $priority_weight = isset($priority_map[$nameKey]) ? (int) $priority_map[$nameKey] : null;
 
         if (isset($by_name[$nameKey])) {
           if (empty($by_name[$nameKey]['image_url']) && !empty($st['image_url'])) {
@@ -192,7 +190,6 @@ class YC_Shortcode {
             'position'       => $pos,
             'name_key'       => $nameKey,
             'manual_order'   => $manual_weight,
-            'priority_order' => $priority_weight,
           );
         }
       }
@@ -208,12 +205,6 @@ class YC_Shortcode {
     }
 
     usort($list, static function($a, $b) {
-      $pa = isset($a['priority_order']) && $a['priority_order'] !== null ? (int) $a['priority_order'] : PHP_INT_MAX;
-      $pb = isset($b['priority_order']) && $b['priority_order'] !== null ? (int) $b['priority_order'] : PHP_INT_MAX;
-      if ($pa !== $pb) {
-        return $pa <=> $pb;
-      }
-
       $ma = isset($a['manual_order']) && $a['manual_order'] !== null ? (int) $a['manual_order'] : PHP_INT_MAX;
       $mb = isset($b['manual_order']) && $b['manual_order'] !== null ? (int) $b['manual_order'] : PHP_INT_MAX;
       if ($ma !== $mb) {
@@ -253,9 +244,7 @@ class YC_Shortcode {
       $position = isset($staff['position']) ? $staff['position'] : '';
       $id = isset($staff['id']) ? (int) $staff['id'] : 0;
       $href = $render_link($link_branches, $id);
-      $order_attr = isset($staff['priority_order']) && $staff['priority_order'] !== null
-        ? (int) $staff['priority_order']
-        : (isset($staff['manual_order']) && $staff['manual_order'] !== null ? (int) $staff['manual_order'] : 9999);
+      $order_attr = isset($staff['manual_order']) && $staff['manual_order'] !== null ? (int) $staff['manual_order'] : 9999;
 
       echo '<div class="yc-staff-card" data-order="' . esc_attr($order_attr) . '">';
       if ($href) {
