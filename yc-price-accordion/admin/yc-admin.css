@@ -4,6 +4,7 @@
 
 .yc-sync-card{display:flex;flex-direction:column;gap:16px}
 .yc-sync-header{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap}
+.yc-sync-actions{display:flex;flex-wrap:wrap;gap:8px}
 .yc-sync-status{margin:6px 0 0;font-size:14px;color:#475569}
 .yc-sync-progress{border:1px solid #e2e8f0;border-radius:8px;padding:12px;background:#f8fafc}
 .yc-progress-bar{height:8px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-bottom:8px}

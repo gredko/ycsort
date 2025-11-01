@@ -73,10 +73,12 @@ class YC_Admin {
             'nonce'     => wp_create_nonce('wp_rest'),
             'lastSync'  => (int) get_option(self::OPTION_LAST_SYNC, 0),
             'i18n'      => array(
-                'syncing'    => __('Синхронизация…', 'yc-price-accordion'),
-                'done'       => __('Синхронизация завершена', 'yc-price-accordion'),
-                'error'      => __('Ошибка синхронизации', 'yc-price-accordion'),
-                'buttonStart'=> __('Синхронизировать', 'yc-price-accordion'),
+                'syncing'          => __('Синхронизация…', 'yc-price-accordion'),
+                'done'             => __('Синхронизация завершена', 'yc-price-accordion'),
+                'error'            => __('Ошибка синхронизации', 'yc-price-accordion'),
+                'buttonAll'        => __('Синхронизировать все', 'yc-price-accordion'),
+                'buttonStaff'      => __('Синхронизировать специалистов', 'yc-price-accordion'),
+                'buttonServices'   => __('Синхронизировать услуги', 'yc-price-accordion'),
             ),
         );
         wp_localize_script('yc-admin', 'ycPaAdmin', $status);
@@ -103,7 +105,11 @@ class YC_Admin {
                         <p class="description"><?php esc_html_e('Выгрузите услуги и специалистов из YClients в локальную базу одним кликом. Во время синхронизации прогресс отображается ниже.', 'yc-price-accordion'); ?></p>
                         <p class="yc-sync-status" data-label="<?php esc_attr_e('Последняя синхронизация', 'yc-price-accordion'); ?>"><strong><?php esc_html_e('Последняя синхронизация:', 'yc-price-accordion'); ?></strong> <?php echo esc_html($last_sync_text); ?></p>
                     </div>
-                    <button type="button" class="button button-primary" id="yc-sync-start"><?php esc_html_e('Синхронизировать', 'yc-price-accordion'); ?></button>
+                    <div class="yc-sync-actions">
+                        <button type="button" class="button button-primary" data-sync-mode="all" data-label="<?php esc_attr_e('Синхронизировать все', 'yc-price-accordion'); ?>"><?php esc_html_e('Синхронизировать все', 'yc-price-accordion'); ?></button>
+                        <button type="button" class="button button-secondary" data-sync-mode="staff" data-label="<?php esc_attr_e('Синхронизировать специалистов', 'yc-price-accordion'); ?>"><?php esc_html_e('Синхронизировать специалистов', 'yc-price-accordion'); ?></button>
+                        <button type="button" class="button button-secondary" data-sync-mode="services" data-label="<?php esc_attr_e('Синхронизировать услуги', 'yc-price-accordion'); ?>"><?php esc_html_e('Синхронизировать услуги', 'yc-price-accordion'); ?></button>
+                    </div>
                 </div>
                 <div class="yc-sync-progress" id="yc-sync-progress" hidden>
                     <div class="yc-progress-bar"><span style="width:0%;"></span></div>

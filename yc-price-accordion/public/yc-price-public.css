@@ -1,4 +1,19 @@
 /* === YC Price Accordion v1.5.0 — 3 columns staff grid + larger photos === */
+.yc-all-services{
+  display:grid;
+  gap:20px;
+}
+.yc-all-branch{
+  border:1px solid var(--yc-border, #e5e7eb);
+  border-radius:var(--yc-radius, 12px);
+  background:#fff;
+  padding:16px;
+}
+.yc-all-branch-title{
+  font-size:18px;
+  font-weight:700;
+  margin-bottom:12px;
+}
 .yc-staff-grid{
   display:grid;
   grid-template-columns:repeat(3,minmax(0,1fr));

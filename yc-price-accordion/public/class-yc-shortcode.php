@@ -5,6 +5,7 @@ if (!defined('ABSPATH')) exit;
 class YC_Shortcode {
   public static function init(){
     add_shortcode('yclients_price', [__CLASS__,'render']);
+    add_shortcode('yclients_all_services', [__CLASS__, 'render_all_services']);
     add_action('wp_enqueue_scripts', [__CLASS__,'assets']);
   }
   public static function assets(){
@@ -447,8 +448,6 @@ class YC_Shortcode {
 
     wp_enqueue_style('yc-accordion');
     wp_enqueue_script('yc-accordion');
-    $page = yc_pa_vlist_page();
-
     ob_start();
     if (yc_pa_debug_enabled() && current_user_can('manage_options')){
       echo '<div class="yc-pa-debug" style="margin:12px 0;padding:12px;border:1px dashed #c2410c;background:#fff7ed;">';
@@ -463,7 +462,7 @@ class YC_Shortcode {
     echo '<div class="yc-accordion-section">';
     $yc_price_t = esc_html( get_option('yc_title_price','Прайс - лист') );
     echo '<div class="yc-block-title">'.$yc_price_t.'</div>';
-    echo '<div class="yc-accordion" role="tablist" aria-multiselectable="true" data-page="'.esc_attr($page).'">';
+    echo '<div class="yc-accordion" role="tablist" aria-multiselectable="true">';
     foreach($dataset as $row){
       $branch=$row['branch']; $panel_id='yc-acc-'.esc_attr($branch['id']);
       echo '<div class="yc-acc-item" data-branch="'.esc_attr($branch['id']).'">';
@@ -474,16 +473,14 @@ class YC_Shortcode {
       } else {
         foreach($row['categories'] as $cat){
           $items = $cat['items'];
-          $total = count($items); $initial = array_slice($items,0,$page); $rest = array_slice($items,$page);
+          if (empty($items)) {
+            continue;
+          }
           echo '<div class="yc-cat" data-category="'.esc_attr($cat['category_id']).'">';
           $cat_label = isset($cat['category_label']) ? $cat['category_label'] : (isset($cat['category_name']) ? $cat['category_name'] : 'Категория');
-          echo '<div class="yc-cat-title">'.esc_html($cat_label).($total>$page?' · <span class="yc-cat-count">'.intval($total).'</span>':'').'</div>';
-          $rest_attr = '';
-          if (!empty($rest)) {
-            $rest_attr = ' data-rest="' . esc_attr(wp_json_encode($rest, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . '"';
-          }
-          echo '<ul class="yc-services"'.$rest_attr.'>';
-          foreach($initial as $svc){
+          echo '<div class="yc-cat-title">'.esc_html($cat_label).'</div>';
+          echo '<ul class="yc-services">';
+          foreach($items as $svc){
             $name = isset($svc['title'])?$svc['title']:(isset($svc['name'])?$svc['name']:'');
             $sid  = intval(isset($svc['id'])?$svc['id']:0);
             $price_txt = isset($svc['display_price']) ? $svc['display_price'] : self::format_service_price_text($svc);
@@ -499,7 +496,6 @@ class YC_Shortcode {
             echo '</div></div></li>';
           }
           echo '</ul>';
-          if (!empty($rest)) echo '<button class="yc-load-more" type="button">Показать ещё</button>';
           echo '</div>';
         }
       }
@@ -513,6 +509,115 @@ class YC_Shortcode {
       echo self::render_staff_grid($branches, $filter_branch, $filter_cat, $filter_ids);
       echo '</div>';
     }
+
+    return ob_get_clean();
+  }
+
+  public static function render_all_services($atts = array()){
+    $atts = shortcode_atts(array('branch_id' => ''), $atts, 'yclients_all_services');
+
+    $branches = yc_get_branches();
+    if (empty($branches)) {
+      return '<div class="yc-price-empty">Не настроены филиалы.</div>';
+    }
+
+    $filter_branch = $atts['branch_id'] !== '' ? intval($atts['branch_id']) : null;
+
+    $dataset = array();
+    foreach ($branches as $branch) {
+      $cid = isset($branch['id']) ? intval($branch['id']) : 0;
+      if ($cid <= 0) {
+        continue;
+      }
+      if ($filter_branch && $cid !== $filter_branch) {
+        continue;
+      }
+
+      $categories_map = YC_API::get_categories($cid);
+      $services = YC_API::get_services($cid, null);
+      if (empty($services)) {
+        continue;
+      }
+
+      $grouped = array();
+      foreach ($services as $svc) {
+        if (isset($svc['is_active']) && intval($svc['is_active']) !== 1) {
+          continue;
+        }
+        $cat_id = isset($svc['category_id']) ? intval($svc['category_id']) : 0;
+        if (!isset($grouped[$cat_id])) {
+          $grouped[$cat_id] = array('category_id' => $cat_id, 'items' => array());
+        }
+        $svc['display_price'] = isset($svc['display_price']) ? $svc['display_price'] : self::format_service_price_text($svc);
+        $svc['booking_url'] = isset($svc['booking_url']) ? $svc['booking_url'] : '';
+        if (empty($svc['booking_url'])) {
+          $branch_arr = isset($svc['branch']) ? $svc['branch'] : $branch;
+          $svc_id = isset($svc['id']) ? intval($svc['id']) : 0;
+          $svc['booking_url'] = $svc_id > 0 ? yc_pa_build_booking_url($branch_arr, $cid, $svc_id) : '';
+        }
+        $grouped[$cat_id]['items'][] = $svc;
+      }
+
+      if (empty($grouped)) {
+        continue;
+      }
+
+      $categories = array();
+      foreach ($grouped as $cat_id => $row) {
+        if (empty($row['items'])) {
+          continue;
+        }
+        $cat_name = self::resolve_category_name($cat_id, $row['items'], $categories_map);
+        $categories[] = array(
+          'category_id'    => $cat_id,
+          'category_name'  => $cat_name,
+          'items'          => $row['items'],
+        );
+      }
+
+      if (empty($categories)) {
+        continue;
+      }
+
+      usort($categories, static function ($a, $b) {
+        return strcasecmp($a['category_name'], $b['category_name']);
+      });
+
+      $dataset[] = array('branch' => $branch, 'categories' => $categories);
+    }
+
+    if (empty($dataset)) {
+      return '<div class="yc-price-empty">Нет активных услуг.</div>';
+    }
+
+    ob_start();
+    echo '<div class="yc-all-services">';
+    foreach ($dataset as $row) {
+      $branch = $row['branch'];
+      $title = !empty($branch['title']) ? $branch['title'] : 'Филиал';
+      echo '<div class="yc-all-branch">';
+      echo '<div class="yc-all-branch-title">' . esc_html($title) . '</div>';
+      foreach ($row['categories'] as $cat) {
+        echo '<div class="yc-cat" data-category="' . esc_attr($cat['category_id']) . '">';
+        echo '<div class="yc-cat-title">' . esc_html($cat['category_name']) . '</div>';
+        echo '<ul class="yc-services">';
+        foreach ($cat['items'] as $svc) {
+          $name = isset($svc['title']) ? $svc['title'] : (isset($svc['name']) ? $svc['name'] : '');
+          $price_txt = isset($svc['display_price']) ? $svc['display_price'] : self::format_service_price_text($svc);
+          $book_url = isset($svc['booking_url']) ? $svc['booking_url'] : '';
+          echo '<li class="yc-service"><div class="yc-service-row"><div class="yc-service-name">' . esc_html($name) . '</div>';
+          echo '<div class="yc-service-right"><div class="yc-service-price">' . esc_html($price_txt) . '</div>';
+          if ($book_url) {
+            echo '<a class="yc-book-btn" href="' . esc_url($book_url) . '" target="_blank" rel="noopener nofollow">Записаться</a>';
+          }
+          echo '</div></div></li>';
+        }
+        echo '</ul>';
+        echo '</div>';
+      }
+      echo '</div>';
+    }
+    echo '</div>';
 
     return ob_get_clean();
   }
