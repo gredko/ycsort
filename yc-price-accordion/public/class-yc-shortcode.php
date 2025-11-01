@@ -370,12 +370,39 @@ class YC_Shortcode {
     if (empty($branches)) return '<div class="yc-price-empty">Не настроены филиалы.</div>';
 
     $filter_branch = $atts['branch_id']!=='' ? intval($atts['branch_id']) : null;
-    $filter_cat    = $atts['category_id']!=='' ? intval($atts['category_id']) : null;
+
+    $filter_cat = null;
     $filter_ids = array();
-    if (yc_pa_multi_cats_enabled() && !empty($atts['category_ids'])){
-      foreach(explode(',', $atts['category_ids']) as $p){
-        $v = intval(trim($p)); if($v>0) $filter_ids[]=$v;
+
+    $raw_category = trim((string) $atts['category_id']);
+    if ($raw_category !== '') {
+      $cat_parts = array_values(array_filter(array_map('trim', explode(',', $raw_category)), 'strlen'));
+      if (count($cat_parts) > 1) {
+        foreach ($cat_parts as $part) {
+          $value = intval($part);
+          if ($value > 0) {
+            $filter_ids[] = $value;
+          }
+        }
+      } elseif (count($cat_parts) === 1) {
+        $filter_cat = intval($cat_parts[0]);
       }
+    }
+
+    $raw_category_ids = trim((string) $atts['category_ids']);
+    if ($raw_category_ids !== '') {
+      $multi_parts = array_values(array_filter(array_map('trim', explode(',', $raw_category_ids)), 'strlen'));
+      foreach ($multi_parts as $part) {
+        $value = intval($part);
+        if ($value > 0) {
+          $filter_ids[] = $value;
+        }
+      }
+    }
+
+    if (!empty($filter_ids)) {
+      $filter_ids = array_values(array_unique($filter_ids));
+      $filter_cat = null; // multi-selection overrides single category filter
     }
 
     // Build dataset for price list
@@ -395,8 +422,10 @@ class YC_Shortcode {
         $hasStaff=false; foreach($svc['staff'] as $st){ if(!empty($st['id'])){ $hasStaff=true; break; } }
         if(!$hasStaff) continue;
         if (!isset($grouped[$cat_id])) $grouped[$cat_id] = array('category_id'=>$cat_id,'items'=>array());
+        $svc_id = isset($svc['id']) ? (int) $svc['id'] : 0;
         $svc['company_id'] = $cid; $svc['company_title'] = $b['title']; $svc['branch'] = $b;
         $svc['display_price'] = self::format_service_price_text($svc);
+        $svc['booking_url'] = $svc_id > 0 ? yc_pa_build_booking_url($b, $cid, $svc_id) : '';
         $grouped[$cat_id]['items'][] = $svc;
       }
       $categories=array();
@@ -411,7 +440,9 @@ class YC_Shortcode {
         );
       }
       usort($categories,function($a,$b){ return strcasecmp($a['category_name'],$b['category_name']); });
-      $dataset[] = array('branch'=>$b,'categories'=>$categories);
+      if (!empty($categories)) {
+        $dataset[] = array('branch'=>$b,'categories'=>$categories);
+      }
     }
 
     wp_enqueue_style('yc-accordion');
@@ -456,8 +487,13 @@ class YC_Shortcode {
             $name = isset($svc['title'])?$svc['title']:(isset($svc['name'])?$svc['name']:'');
             $sid  = intval(isset($svc['id'])?$svc['id']:0);
             $price_txt = isset($svc['display_price']) ? $svc['display_price'] : self::format_service_price_text($svc);
-            $branch_arr = isset($svc['branch'])?$svc['branch']:array('id'=>intval($svc['company_id']));
-            $book_url = yc_pa_build_booking_url($branch_arr, intval($svc['company_id']), $sid);
+            $book_url = '';
+            if (!empty($svc['booking_url'])) {
+              $book_url = $svc['booking_url'];
+            } else {
+              $branch_arr = isset($svc['branch'])?$svc['branch']:array('id'=>intval($svc['company_id']));
+              $book_url = yc_pa_build_booking_url($branch_arr, intval($svc['company_id']), $sid);
+            }
             echo '<li class="yc-service"><div class="yc-service-row"><div class="yc-service-name">'.esc_html($name).'</div><div class="yc-service-right"><div class="yc-service-price">'.esc_html($price_txt).'</div>';
             if ($book_url) echo '<a class="yc-book-btn" href="'.esc_url($book_url).'" target="_blank" rel="noopener nofollow">Записаться</a>';
             echo '</div></div></li>';

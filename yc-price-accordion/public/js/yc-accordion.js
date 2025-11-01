@@ -66,14 +66,13 @@
           return n.toLocaleString('ru-RU');
         }
       };
-      for (var i=0;i<chunk.length;i++) {
-        var svc = chunk[i];
-        var name = svc.title || svc.name || '';
-        var providedPrice = (typeof svc.display_price === 'string') ? svc.display_price.trim() : '';
+      var createServiceItem = function(svc) {
+        var name = svc && (svc.title || svc.name) ? (svc.title || svc.name) : '';
+        var providedPrice = (svc && typeof svc.display_price === 'string') ? svc.display_price.trim() : '';
         var price = providedPrice !== '' ? providedPrice : null;
         if (!price) {
-          var pmin = Number((svc.price_min!=null?svc.price_min:(svc.price!=null?svc.price:0))) || 0;
-          var pmax = Number((svc.price_max!=null?svc.price_max:0)) || 0;
+          var pmin = Number((svc && svc.price_min != null ? svc.price_min : (svc && svc.price != null ? svc.price : 0))) || 0;
+          var pmax = Number((svc && svc.price_max != null ? svc.price_max : 0)) || 0;
           price = '—';
           if (pmin > 0 || pmax > 0) {
             if (pmin > 0 && pmax > 0 && Math.abs(pmax - pmin) >= 0.01) {
@@ -84,12 +83,45 @@
             }
           }
         }
+
         var li = document.createElement('li');
         li.className = 'yc-service';
-        li.innerHTML = '<div class="yc-service-row"><div class="yc-service-name"></div><div class="yc-service-right"><div class="yc-service-price"></div></div></div>';
-        li.querySelector('.yc-service-name').textContent = name;
-        li.querySelector('.yc-service-price').textContent = price || '—';
-        list.appendChild(li);
+
+        var row = document.createElement('div');
+        row.className = 'yc-service-row';
+
+        var nameEl = document.createElement('div');
+        nameEl.className = 'yc-service-name';
+        nameEl.textContent = name;
+
+        var right = document.createElement('div');
+        right.className = 'yc-service-right';
+
+        var priceEl = document.createElement('div');
+        priceEl.className = 'yc-service-price';
+        priceEl.textContent = price || '—';
+
+        right.appendChild(priceEl);
+
+        var bookUrl = (svc && typeof svc.booking_url === 'string') ? svc.booking_url : '';
+        if (bookUrl) {
+          var btn = document.createElement('a');
+          btn.className = 'yc-book-btn';
+          btn.href = bookUrl;
+          btn.target = '_blank';
+          btn.rel = 'noopener nofollow';
+          btn.textContent = 'Записаться';
+          right.appendChild(btn);
+        }
+
+        row.appendChild(nameEl);
+        row.appendChild(right);
+        li.appendChild(row);
+        return li;
+      };
+      for (var i=0;i<chunk.length;i++) {
+        var svc = chunk[i];
+        list.appendChild(createServiceItem(svc));
       }
       if (items.length>0) { list.setAttribute('data-rest', JSON.stringify(items)); } else { list.removeAttribute('data-rest'); moreBtn.remove(); }
       return;
