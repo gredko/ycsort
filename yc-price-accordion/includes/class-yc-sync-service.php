@@ -8,7 +8,7 @@ class YC_Sync_Service {
         $mode = isset($args['mode']) ? (string) $args['mode'] : 'branch';
         switch ($mode) {
             case 'staff_list':
-                return self::sync_staff_list($company_id);
+                return self::sync_staff_list($company_id, $args);
             case 'staff_photos':
                 return self::sync_staff_photos($company_id, $args);
             case 'services_init':
@@ -112,7 +112,7 @@ class YC_Sync_Service {
         return $map;
     }
 
-    protected static function sync_staff_list(int $company_id) : array {
+    protected static function sync_staff_list(int $company_id, array $args = array()) : array {
         $result = array(
             'mode'       => 'staff_list',
             'categories' => false,
@@ -121,6 +121,14 @@ class YC_Sync_Service {
             'errors'     => array(),
             'stats'      => array(),
         );
+
+        $reset = isset($args['reset']) ? (bool) $args['reset'] : false;
+        if ($reset) {
+            YC_Repository::purge_company($company_id);
+            if (class_exists('YC_Storage')) {
+                YC_Storage::purge_company($company_id);
+            }
+        }
 
         $staff_resp = YC_API::fetch_staff_remote($company_id);
         $staff_data = array();

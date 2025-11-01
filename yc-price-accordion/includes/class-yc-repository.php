@@ -103,6 +103,61 @@ class YC_Repository {
         update_option(self::OPTION_VERSION, self::VERSION, false);
     }
 
+    public static function purge_company(int $company_id) : void {
+        $cid = (int) $company_id;
+        if ($cid <= 0) {
+            return;
+        }
+
+        global $wpdb;
+        $services = self::table_services();
+        $staff    = self::table_staff();
+        $pivot    = self::table_service_staff();
+        $cats     = self::table_categories();
+
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT staff_id, image_id, image_hash, image_url FROM $staff WHERE company_id = %d",
+                $cid
+            ),
+            ARRAY_A
+        );
+
+        if (is_array($rows)) {
+            foreach ($rows as $row) {
+                $attachment_id = isset($row['image_id']) ? (int) $row['image_id'] : 0;
+                if ($attachment_id <= 0) {
+                    continue;
+                }
+
+                $hash = isset($row['image_hash']) ? (string) $row['image_hash'] : '';
+                $source = isset($row['image_url']) ? (string) $row['image_url'] : '';
+                if ($hash === '' && $source !== '') {
+                    $hash = md5($source);
+                }
+
+                if (!class_exists('YC_Media')) {
+                    continue;
+                }
+
+                YC_Media::remember_staff_image(
+                    $attachment_id,
+                    $hash,
+                    $cid,
+                    isset($row['staff_id']) ? (int) $row['staff_id'] : 0,
+                    $source
+                );
+            }
+        }
+
+        $wpdb->delete($services, array('company_id' => $cid), array('%d'));
+        $wpdb->delete($staff, array('company_id' => $cid), array('%d'));
+        $wpdb->delete($pivot, array('company_id' => $cid), array('%d'));
+        $wpdb->delete($cats, array('company_id' => $cid), array('%d'));
+
+        delete_option(self::service_sync_option($cid));
+    }
+
     public static function table_services() : string {
         global $wpdb;
         return $wpdb->prefix . 'yc_pa_services';
