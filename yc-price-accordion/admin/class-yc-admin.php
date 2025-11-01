@@ -279,28 +279,26 @@ class YC_Admin {
             $active_count = 0;
             $grouped = array();
             $last_updated = self::get_services_last_updated(is_array($services) ? $services : array());
+            $category_map = YC_API::get_categories($branch['id']);
+            if (!is_array($category_map)) {
+                $category_map = array();
+            }
 
             if (!empty($services) && is_array($services)) {
                 foreach ($services as $service) {
                     if (!is_array($service)) {
                         continue;
                     }
-                    $group_key = '0';
-                    $group_name = esc_html__('Без категории', 'yc-price-accordion');
-                    if (!empty($service['category']) && is_array($service['category'])) {
-                        $group_id = isset($service['category']['id']) ? (int) $service['category']['id'] : 0;
-                        $group_title = isset($service['category']['title']) && $service['category']['title'] !== '' ? $service['category']['title'] : '';
-                        $normalized_title = $group_title;
-                        if ($group_title !== '') {
-                            if (function_exists('mb_strtolower')) {
-                                $normalized_title = mb_strtolower($group_title, 'UTF-8');
-                            } else {
-                                $normalized_title = strtolower($group_title);
-                            }
+                    list($group_id, $group_name) = self::resolve_service_category_group($service, $category_map);
+                    $normalized_title = $group_name;
+                    if ($normalized_title !== '') {
+                        if (function_exists('mb_strtolower')) {
+                            $normalized_title = mb_strtolower($normalized_title, 'UTF-8');
+                        } else {
+                            $normalized_title = strtolower($normalized_title);
                         }
-                        $group_key = $group_id . '|' . $normalized_title;
-                        $group_name = $group_title !== '' ? $group_title : sprintf(esc_html__('Категория #%d', 'yc-price-accordion'), $group_id);
                     }
+                    $group_key = $group_id . '|' . $normalized_title;
                     if (!isset($grouped[$group_key])) {
                         $grouped[$group_key] = array(
                             'title'    => $group_name,
@@ -654,6 +652,61 @@ class YC_Admin {
             $html .= '<br /><span class="yc-service-staff-more">' . sprintf(esc_html__('и ещё %d', 'yc-price-accordion'), $more) . '</span>';
         }
         return $html;
+    }
+
+    protected static function resolve_service_category_group(array $service, array $category_map) : array {
+        $category_id = 0;
+        if (isset($service['category_id'])) {
+            $category_id = (int) $service['category_id'];
+        } elseif (isset($service['categoryId'])) {
+            $category_id = (int) $service['categoryId'];
+        } elseif (!empty($service['category']) && is_array($service['category']) && isset($service['category']['id'])) {
+            $category_id = (int) $service['category']['id'];
+        }
+
+        $name = self::extract_service_category_label($service);
+        if ($name === '' && $category_id > 0 && isset($category_map[$category_id]) && $category_map[$category_id] !== '') {
+            $name = (string) $category_map[$category_id];
+        }
+
+        if ($name === '') {
+            if ($category_id > 0) {
+                $name = sprintf(esc_html__('Категория #%d', 'yc-price-accordion'), $category_id);
+            } else {
+                $name = esc_html__('Без категории', 'yc-price-accordion');
+            }
+        }
+
+        return array($category_id, $name);
+    }
+
+    protected static function extract_service_category_label(array $service) : string {
+        $candidates = array('category_label', 'category_title', 'category_name', 'categoryName', 'categoryTitle', 'group', 'group_name', 'group_title');
+        foreach ($candidates as $candidate) {
+            if (!empty($service[$candidate]) && is_string($service[$candidate])) {
+                return trim(wp_strip_all_tags((string) $service[$candidate]));
+            }
+        }
+
+        if (!empty($service['category']) && is_array($service['category'])) {
+            foreach ($candidates as $candidate) {
+                if (!empty($service['category'][$candidate]) && is_string($service['category'][$candidate])) {
+                    return trim(wp_strip_all_tags((string) $service['category'][$candidate]));
+                }
+            }
+            if (!empty($service['category']['title'])) {
+                return trim(wp_strip_all_tags((string) $service['category']['title']));
+            }
+            if (!empty($service['category']['name'])) {
+                return trim(wp_strip_all_tags((string) $service['category']['name']));
+            }
+        }
+
+        if (!empty($service['category_name']) && is_string($service['category_name'])) {
+            return trim(wp_strip_all_tags((string) $service['category_name']));
+        }
+
+        return '';
     }
 
     protected static function get_services_last_updated(array $services) : string {
