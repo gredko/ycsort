@@ -277,7 +277,11 @@ class YC_Repository {
         $now   = self::now();
         $ids   = array();
         $relations = array();
-        $existing_orders = self::get_existing_service_orders($company_id);
+        $existing_rows = self::get_existing_service_rows($company_id);
+        $existing_orders = array();
+        foreach ($existing_rows as $sid => $row) {
+            $existing_orders[$sid] = isset($row['sort_order']) ? (int) $row['sort_order'] : 0;
+        }
         foreach ($services as $service) {
             if (!is_array($service)) {
                 continue;
@@ -318,25 +322,32 @@ class YC_Repository {
                 $sort = isset($service['weight']) ? (int) $service['weight'] : (isset($service['sort_order']) ? (int) $service['sort_order'] : 0);
             }
 
-            $wpdb->replace(
-                $table,
-                array(
-                    'company_id'    => $company_id,
-                    'service_id'    => $service_id,
-                    'category_id'   => $category_id,
-                    'category_name' => $category_name,
-                    'title'         => $title,
-                    'description'   => $description,
-                    'price_min'     => $price_min,
-                    'price_max'     => $price_max,
-                    'duration'      => $duration,
-                    'raw_data'      => wp_json_encode($service),
-                    'is_active'     => $is_active,
-                    'sort_order'    => $sort,
-                    'updated_at'    => $now,
-                ),
-                array('%d','%d','%d','%s','%s','%f','%f','%d','%s','%d','%d','%s')
+            $raw_json = wp_json_encode($service);
+            $row_data = array(
+                'company_id'    => $company_id,
+                'service_id'    => $service_id,
+                'category_id'   => $category_id,
+                'category_name' => $category_name,
+                'title'         => $title,
+                'description'   => $description,
+                'price_min'     => $price_min,
+                'price_max'     => $price_max,
+                'duration'      => $duration,
+                'raw_data'      => $raw_json,
+                'is_active'     => $is_active,
+                'sort_order'    => $sort,
+                'updated_at'    => $now,
             );
+
+            $existing_row = isset($existing_rows[$service_id]) ? $existing_rows[$service_id] : null;
+            if (self::should_update_service_row($existing_row, $row_data, $raw_json)) {
+                $wpdb->replace(
+                    $table,
+                    $row_data,
+                    array('%d','%d','%d','%s','%s','%f','%f','%d','%s','%d','%d','%s')
+                );
+                $existing_rows[$service_id] = $row_data;
+            }
 
             if (!empty($service['staff']) && is_array($service['staff'])) {
                 foreach ($service['staff'] as $staff) {
@@ -406,7 +417,11 @@ class YC_Repository {
         $table = self::table_staff();
         $now   = self::now();
         $ids   = array();
-        $existing_orders = self::get_existing_staff_orders($company_id);
+        $existing_rows = self::get_existing_staff_rows($company_id);
+        $existing_orders = array();
+        foreach ($existing_rows as $sid => $row) {
+            $existing_orders[$sid] = isset($row['sort_order']) ? (int) $row['sort_order'] : 0;
+        }
         foreach ($staff as $row) {
             if (!is_array($row)) {
                 continue;
@@ -420,6 +435,7 @@ class YC_Repository {
             if ($sort_order === null || $sort_order === 0) {
                 $sort_order = 500;
             }
+            $raw_json = wp_json_encode($row);
             $data = array(
                 'company_id' => $company_id,
                 'staff_id'   => $staff_id,
@@ -429,7 +445,7 @@ class YC_Repository {
                 'image_id'   => 0,
                 'image_url'  => '',
                 'image_hash' => '',
-                'raw_data'   => wp_json_encode($row),
+                'raw_data'   => $raw_json,
                 'is_active'  => isset($row['active']) ? (int) !!$row['active'] : 1,
                 'sort_order' => $sort_order,
                 'updated_at' => $now,
@@ -440,7 +456,11 @@ class YC_Repository {
                 $data['image_url']  = isset($img['url']) ? (string) $img['url'] : '';
                 $data['image_hash'] = isset($img['hash']) ? (string) $img['hash'] : '';
             }
-            $wpdb->replace($table, $data, array('%d','%d','%s','%s','%s','%d','%s','%s','%s','%d','%d','%s'));
+            $existing_row = isset($existing_rows[$staff_id]) ? $existing_rows[$staff_id] : null;
+            if (self::should_update_staff_row($existing_row, $data, $raw_json)) {
+                $wpdb->replace($table, $data, array('%d','%d','%s','%s','%s','%d','%s','%s','%s','%d','%d','%s'));
+                $existing_rows[$staff_id] = $data;
+            }
         }
         if (empty($ids)) {
             $wpdb->delete($table, array('company_id' => $company_id), array('%d'));
@@ -452,12 +472,12 @@ class YC_Repository {
         return array('total' => count($ids));
     }
 
-    protected static function get_existing_staff_orders(int $company_id) : array {
+    protected static function get_existing_staff_rows(int $company_id) : array {
         global $wpdb;
         $table = self::table_staff();
         $rows = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT staff_id, sort_order FROM $table WHERE company_id = %d",
+                "SELECT staff_id, name, position, about, image_id, image_url, image_hash, raw_data, is_active, sort_order FROM $table WHERE company_id = %d",
                 $company_id
             ),
             ARRAY_A
@@ -469,8 +489,59 @@ class YC_Repository {
                 if ($sid <= 0) {
                     continue;
                 }
-                $map[$sid] = isset($row['sort_order']) ? (int) $row['sort_order'] : 0;
+                $map[$sid] = array(
+                    'staff_id'   => $sid,
+                    'name'       => isset($row['name']) ? (string) $row['name'] : '',
+                    'position'   => isset($row['position']) ? (string) $row['position'] : '',
+                    'about'      => isset($row['about']) ? (string) $row['about'] : '',
+                    'image_id'   => isset($row['image_id']) ? (int) $row['image_id'] : 0,
+                    'image_url'  => isset($row['image_url']) ? (string) $row['image_url'] : '',
+                    'image_hash' => isset($row['image_hash']) ? (string) $row['image_hash'] : '',
+                    'raw_data'   => isset($row['raw_data']) ? (string) $row['raw_data'] : '',
+                    'is_active'  => isset($row['is_active']) ? (int) $row['is_active'] : 0,
+                    'sort_order' => isset($row['sort_order']) ? (int) $row['sort_order'] : 0,
+                );
             }
+        }
+        return $map;
+    }
+
+    protected static function should_update_staff_row(?array $existing, array $data, string $raw_json) : bool {
+        if ($existing === null) {
+            return true;
+        }
+
+        $string_fields = array('name', 'position', 'about', 'image_url', 'image_hash');
+        foreach ($string_fields as $field) {
+            $existing_value = isset($existing[$field]) ? (string) $existing[$field] : '';
+            $new_value = isset($data[$field]) ? (string) $data[$field] : '';
+            if ($existing_value !== $new_value) {
+                return true;
+            }
+        }
+
+        $int_fields = array('image_id', 'is_active', 'sort_order');
+        foreach ($int_fields as $field) {
+            $existing_value = isset($existing[$field]) ? (int) $existing[$field] : 0;
+            $new_value = isset($data[$field]) ? (int) $data[$field] : 0;
+            if ($existing_value !== $new_value) {
+                return true;
+            }
+        }
+
+        $existing_raw = isset($existing['raw_data']) ? (string) $existing['raw_data'] : '';
+        if ($existing_raw !== $raw_json) {
+            return true;
+        }
+
+        return false;
+    }
+
+    protected static function get_existing_staff_orders(int $company_id) : array {
+        $rows = self::get_existing_staff_rows($company_id);
+        $map = array();
+        foreach ($rows as $sid => $row) {
+            $map[$sid] = isset($row['sort_order']) ? (int) $row['sort_order'] : 0;
         }
         return $map;
     }
@@ -628,7 +699,11 @@ class YC_Repository {
         $ids   = array();
         $relations = array();
 
-        $existing_orders = self::get_existing_service_orders($company_id);
+        $existing_rows = self::get_existing_service_rows($company_id);
+        $existing_orders = array();
+        foreach ($existing_rows as $sid => $row) {
+            $existing_orders[$sid] = isset($row['sort_order']) ? (int) $row['sort_order'] : 0;
+        }
         foreach ($services as $service) {
             if (!is_array($service)) {
                 continue;
@@ -671,25 +746,32 @@ class YC_Repository {
                 $sort = isset($service['weight']) ? (int) $service['weight'] : (isset($service['sort_order']) ? (int) $service['sort_order'] : 0);
             }
 
-            $wpdb->replace(
-                $table,
-                array(
-                    'company_id'    => $company_id,
-                    'service_id'    => $service_id,
-                    'category_id'   => $category_id,
-                    'category_name' => $category_name,
-                    'title'         => $title,
-                    'description'   => $description,
-                    'price_min'     => $price_min,
-                    'price_max'     => $price_max,
-                    'duration'      => $duration,
-                    'raw_data'      => wp_json_encode($service),
-                    'is_active'     => $is_active,
-                    'sort_order'    => $sort,
-                    'updated_at'    => $now,
-                ),
-                array('%d','%d','%d','%s','%s','%f','%f','%d','%s','%d','%d','%s')
+            $raw_json = wp_json_encode($service);
+            $row_data = array(
+                'company_id'    => $company_id,
+                'service_id'    => $service_id,
+                'category_id'   => $category_id,
+                'category_name' => $category_name,
+                'title'         => $title,
+                'description'   => $description,
+                'price_min'     => $price_min,
+                'price_max'     => $price_max,
+                'duration'      => $duration,
+                'raw_data'      => $raw_json,
+                'is_active'     => $is_active,
+                'sort_order'    => $sort,
+                'updated_at'    => $now,
             );
+
+            $existing_row = isset($existing_rows[$service_id]) ? $existing_rows[$service_id] : null;
+            if (self::should_update_service_row($existing_row, $row_data, $raw_json)) {
+                $wpdb->replace(
+                    $table,
+                    $row_data,
+                    array('%d','%d','%d','%s','%s','%f','%f','%d','%s','%d','%d','%s')
+                );
+                $existing_rows[$service_id] = $row_data;
+            }
 
             if (!empty($service['staff']) && is_array($service['staff'])) {
                 foreach ($service['staff'] as $staff) {
@@ -728,12 +810,12 @@ class YC_Repository {
         );
     }
 
-    protected static function get_existing_service_orders(int $company_id) : array {
+    protected static function get_existing_service_rows(int $company_id) : array {
         global $wpdb;
         $table = self::table_services();
         $rows = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT service_id, sort_order FROM $table WHERE company_id = %d",
+                "SELECT service_id, category_id, category_name, title, description, price_min, price_max, duration, is_active, sort_order, raw_data FROM $table WHERE company_id = %d",
                 $company_id
             ),
             ARRAY_A
@@ -745,8 +827,69 @@ class YC_Repository {
                 if ($sid <= 0) {
                     continue;
                 }
-                $map[$sid] = isset($row['sort_order']) ? (int) $row['sort_order'] : 0;
+                $map[$sid] = array(
+                    'service_id'    => $sid,
+                    'category_id'   => isset($row['category_id']) ? (int) $row['category_id'] : 0,
+                    'category_name' => isset($row['category_name']) ? (string) $row['category_name'] : '',
+                    'title'         => isset($row['title']) ? (string) $row['title'] : '',
+                    'description'   => isset($row['description']) ? (string) $row['description'] : '',
+                    'price_min'     => isset($row['price_min']) ? (float) $row['price_min'] : 0.0,
+                    'price_max'     => isset($row['price_max']) ? (float) $row['price_max'] : 0.0,
+                    'duration'      => isset($row['duration']) ? (int) $row['duration'] : 0,
+                    'is_active'     => isset($row['is_active']) ? (int) $row['is_active'] : 0,
+                    'sort_order'    => isset($row['sort_order']) ? (int) $row['sort_order'] : 0,
+                    'raw_data'      => isset($row['raw_data']) ? (string) $row['raw_data'] : '',
+                );
             }
+        }
+        return $map;
+    }
+
+    protected static function should_update_service_row(?array $existing, array $data, string $raw_json) : bool {
+        if ($existing === null) {
+            return true;
+        }
+
+        $float_fields = array('price_min', 'price_max');
+        foreach ($float_fields as $field) {
+            $existing_value = isset($existing[$field]) ? (float) $existing[$field] : 0.0;
+            $new_value = isset($data[$field]) ? (float) $data[$field] : 0.0;
+            if (abs($existing_value - $new_value) > 0.0001) {
+                return true;
+            }
+        }
+
+        $int_fields = array('category_id', 'duration', 'is_active', 'sort_order');
+        foreach ($int_fields as $field) {
+            $existing_value = isset($existing[$field]) ? (int) $existing[$field] : 0;
+            $new_value = isset($data[$field]) ? (int) $data[$field] : 0;
+            if ($existing_value !== $new_value) {
+                return true;
+            }
+        }
+
+        $string_fields = array('category_name', 'title', 'description');
+        foreach ($string_fields as $field) {
+            $existing_value = isset($existing[$field]) ? (string) $existing[$field] : '';
+            $new_value = isset($data[$field]) ? (string) $data[$field] : '';
+            if ($existing_value !== $new_value) {
+                return true;
+            }
+        }
+
+        $existing_raw = isset($existing['raw_data']) ? (string) $existing['raw_data'] : '';
+        if ($existing_raw !== $raw_json) {
+            return true;
+        }
+
+        return false;
+    }
+
+    protected static function get_existing_service_orders(int $company_id) : array {
+        $rows = self::get_existing_service_rows($company_id);
+        $map = array();
+        foreach ($rows as $sid => $row) {
+            $map[$sid] = isset($row['sort_order']) ? (int) $row['sort_order'] : 0;
         }
         return $map;
     }
