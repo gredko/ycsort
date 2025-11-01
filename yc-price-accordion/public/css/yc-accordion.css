@@ -23,8 +23,6 @@
 .yc-service-price{font-size:16px;font-weight:700;white-space:nowrap}
 .yc-book-btn{display:inline-block;padding:6px 10px;border-radius:8px;text-decoration:none;background:#bf8b62;color:#fff;font-weight:600;font-size:13px;transition:background .2s ease}
 .yc-book-btn:hover{background:#927153;color:#fff}
-.yc-load-more{margin:10px 0 0;padding:8px 12px;border:1px solid var(--yc-border);background:#fff;border-radius:8px;cursor:pointer}
-.yc-load-more:hover{background:#f8fafc}
 .yc-block-title{margin:4px 0 8px;font-weight:800;font-size:24px;line-height:1.25}
 .yc-accordion-section .yc-block-title{font-size:24px;font-weight:700;line-height:1.25;margin:0 0 16px}
 @media (max-width:600px){

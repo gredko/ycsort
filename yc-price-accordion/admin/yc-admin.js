@@ -38,7 +38,7 @@ jQuery(function($){
   });
 
   const syncConfig = window.ycPaAdmin || {};
-  const $syncButton = $('#yc-sync-start');
+  const $syncButtons = $('[data-sync-mode]');
   const $progressBox = $('#yc-sync-progress');
   const $progressBar = $progressBox.find('.yc-progress-bar span');
   const $progressMessage = $progressBox.find('.yc-sync-message');
@@ -61,11 +61,29 @@ jQuery(function($){
     $log.prepend($item);
   }
 
-  function setSyncState(running){
+  function buttonLabel($button){
+    const mode = ($button.data('sync-mode') || '').toString();
+    if (mode === 'staff'){
+      return syncConfig.i18n && syncConfig.i18n.buttonStaff ? syncConfig.i18n.buttonStaff : 'Синхронизировать специалистов';
+    }
+    if (mode === 'services'){
+      return syncConfig.i18n && syncConfig.i18n.buttonServices ? syncConfig.i18n.buttonServices : 'Синхронизировать услуги';
+    }
+    return syncConfig.i18n && syncConfig.i18n.buttonAll ? syncConfig.i18n.buttonAll : 'Синхронизировать все';
+  }
+
+  function setSyncState(running, $activeButton){
     if (running){
-      $syncButton.prop('disabled', true).text(syncConfig.i18n ? syncConfig.i18n.syncing : '...');
+      $syncButtons.prop('disabled', true);
+      if ($activeButton && $activeButton.length){
+        $activeButton.text(syncConfig.i18n ? syncConfig.i18n.syncing : '...');
+      }
     } else {
-      $syncButton.prop('disabled', false).text(syncConfig.i18n ? syncConfig.i18n.buttonStart : 'Sync');
+      $syncButtons.each(function(){
+        const $btn = $(this);
+        const label = $btn.data('label') || buttonLabel($btn);
+        $btn.prop('disabled', false).text(label);
+      });
     }
   }
 
@@ -95,12 +113,19 @@ jQuery(function($){
     return fallback;
   };
 
-  async function syncBranch(branch, index, total){
+  async function syncBranch(branch, index, total, options){
+    const settings = $.extend({
+      staff: true,
+      services: true
+    }, options || {});
     const branchName = branch.title || ('ID ' + branch.id);
     const staffPhotoBatch = parseInt(syncConfig.staffPhotosBatch, 10) || 5;
     const servicesBatch = parseInt(syncConfig.servicesBatch, 10) || 50;
     let branchProgress = 0;
     const errors = [];
+
+    const staffWeight = settings.staff ? (settings.services ? 0.5 : 1) : 0;
+    const servicesWeight = settings.services ? (settings.staff ? 0.5 : 1) : 0;
 
     const updateProgress = function(progress, message){
       branchProgress = Math.max(branchProgress, Math.min(1, progress));
@@ -151,88 +176,108 @@ jQuery(function($){
       return json;
     };
 
-    updateProgress(0, branchName + ': ' + t('stageStart', 'Подготовка…'));
-
-    const staffList = await request({
-      mode: 'staff_list',
-      reset: true
-    });
-    const staffStats = (staffList.result && staffList.result.stats) ? staffList.result.stats : {};
-    const staffCount = staffStats.staff || 0;
-    updateProgress(0.2, branchName + ': ' + t('stageStaffListDone', 'Сотрудники обновлены') + ' (' + staffCount + ')');
-
+    let staffCount = 0;
     let photosProcessed = 0;
-    let staffOffset = 0;
-    let staffTotal = staffList.result && staffList.result.state && typeof staffList.result.state.total !== 'undefined'
-      ? staffList.result.state.total
-      : staffCount;
-    if (!staffTotal || staffTotal < staffCount){
-      staffTotal = staffCount;
-    }
+    if (settings.staff){
+      updateProgress(0, branchName + ': ' + t('stageStart', 'Подготовка…'));
 
-    let staffDone = staffTotal === 0;
-    while (!staffDone){
-      const photoResp = await request({
-        mode: 'staff_photos',
-        offset: staffOffset,
-        limit: staffPhotoBatch
+      const staffList = await request({
+        mode: 'staff_list',
+        reset: true
       });
-      const state = photoResp.result && photoResp.result.state ? photoResp.result.state : {};
-      const processed = state.processed || 0;
-      photosProcessed += processed;
-      staffOffset = typeof state.next_offset !== 'undefined' ? state.next_offset : (staffOffset + processed);
-      if (typeof state.total !== 'undefined' && state.total !== null){
-        staffTotal = state.total;
+      const staffStats = (staffList.result && staffList.result.stats) ? staffList.result.stats : {};
+      staffCount = staffStats.staff || 0;
+      updateProgress(staffWeight * 0.4, branchName + ': ' + t('stageStaffListDone', 'Сотрудники обновлены') + ' (' + staffCount + ')');
+
+      let staffOffset = 0;
+      let staffTotal = staffList.result && staffList.result.state && typeof staffList.result.state.total !== 'undefined'
+        ? staffList.result.state.total
+        : staffCount;
+      if (!staffTotal || staffTotal < staffCount){
+        staffTotal = staffCount;
       }
-      const completed = typeof state.completed !== 'undefined' ? state.completed : staffOffset;
-      const denominator = staffTotal && staffTotal > 0 ? staffTotal : (completed > 0 ? completed : 1);
-      const ratio = Math.min(1, denominator ? completed / denominator : 1);
-      updateProgress(0.2 + 0.3 * ratio, branchName + ': ' + t('stageStaffPhotos', 'Загрузка фото сотрудников') + ' (' + completed + '/' + (denominator || '?') + ')');
-      staffDone = !!state.done || processed === 0 || (staffTotal && staffOffset >= staffTotal);
+
+      let staffDone = staffTotal === 0;
+      while (!staffDone){
+        const photoResp = await request({
+          mode: 'staff_photos',
+          offset: staffOffset,
+          limit: staffPhotoBatch
+        });
+        const state = photoResp.result && photoResp.result.state ? photoResp.result.state : {};
+        const processed = state.processed || 0;
+        photosProcessed += processed;
+        staffOffset = typeof state.next_offset !== 'undefined' ? state.next_offset : (staffOffset + processed);
+        if (typeof state.total !== 'undefined' && state.total !== null){
+          staffTotal = state.total;
+        }
+        const completed = typeof state.completed !== 'undefined' ? state.completed : staffOffset;
+        const denominator = staffTotal && staffTotal > 0 ? staffTotal : (completed > 0 ? completed : 1);
+        const ratio = Math.min(1, denominator ? completed / denominator : 1);
+        const progressValue = staffWeight * (0.4 + 0.6 * ratio);
+        updateProgress(progressValue, branchName + ': ' + t('stageStaffPhotos', 'Загрузка фото сотрудников') + ' (' + completed + '/' + (denominator || '?') + ')');
+        staffDone = !!state.done || processed === 0 || (staffTotal && staffOffset >= staffTotal);
+      }
+
+      updateProgress(staffWeight, branchName + ': ' + t('stageStaffPhotosDone', 'Фото сотрудников обновлены') + ' (' + photosProcessed + ')');
     }
 
-    updateProgress(0.5, branchName + ': ' + t('stageStaffPhotosDone', 'Фото сотрудников обновлены') + ' (' + photosProcessed + ')');
+    let servicesProcessed = 0;
+    if (settings.services){
+      if (!settings.staff){
+        updateProgress(0, branchName + ': ' + t('stageStart', 'Подготовка…'));
+      }
 
-    const servicesInit = await request({
-      mode: 'services_init',
-      limit: servicesBatch
-    });
-    let servicesState = servicesInit.result && servicesInit.result.state ? servicesInit.result.state : {};
-    let servicesTotal = typeof servicesState.total !== 'undefined' && servicesState.total !== null ? servicesState.total : null;
-    let servicesProcessed = typeof servicesState.completed !== 'undefined' ? servicesState.completed : (servicesInit.result && servicesInit.result.stats && servicesInit.result.stats.services ? servicesInit.result.stats.services : 0);
-    const updateServicesProgress = function(){
-      const totalValue = servicesTotal && servicesTotal > 0 ? servicesTotal : (servicesProcessed > 0 ? servicesProcessed : 1);
-      const ratio = Math.min(1, totalValue ? servicesProcessed / totalValue : 1);
-      updateProgress(0.5 + 0.5 * ratio, branchName + ': ' + t('stageServices', 'Загрузка услуг') + ' (' + servicesProcessed + '/' + (totalValue || '?') + ')');
-    };
-    updateServicesProgress();
-
-    let hasMore = !!servicesState.has_more;
-    let nextPage = servicesState.next_page || (hasMore ? 2 : null);
-
-    while (hasMore && nextPage){
-      const batchResp = await request({
-        mode: 'services_batch',
-        page: nextPage,
+      const servicesInit = await request({
+        mode: 'services_init',
         limit: servicesBatch
       });
-      servicesState = batchResp.result && batchResp.result.state ? batchResp.result.state : {};
-      if (typeof servicesState.total !== 'undefined' && servicesState.total !== null){
-        servicesTotal = servicesState.total;
-      }
-      if (typeof servicesState.completed !== 'undefined'){
-        servicesProcessed = servicesState.completed;
-      } else {
-        servicesProcessed += servicesState.processed || 0;
-      }
+      let servicesState = servicesInit.result && servicesInit.result.state ? servicesInit.result.state : {};
+      let servicesTotal = typeof servicesState.total !== 'undefined' && servicesState.total !== null ? servicesState.total : null;
+      servicesProcessed = typeof servicesState.completed !== 'undefined' ? servicesState.completed : (servicesInit.result && servicesInit.result.stats && servicesInit.result.stats.services ? servicesInit.result.stats.services : 0);
+      const updateServicesProgress = function(){
+        const totalValue = servicesTotal && servicesTotal > 0 ? servicesTotal : (servicesProcessed > 0 ? servicesProcessed : 1);
+        const ratio = Math.min(1, totalValue ? servicesProcessed / totalValue : 1);
+        const progressValue = staffWeight + servicesWeight * ratio;
+        updateProgress(progressValue, branchName + ': ' + t('stageServices', 'Загрузка услуг') + ' (' + servicesProcessed + '/' + (totalValue || '?') + ')');
+      };
       updateServicesProgress();
-      hasMore = !!servicesState.has_more;
-      nextPage = servicesState.next_page || (hasMore ? (nextPage + 1) : null);
+
+      let hasMore = !!servicesState.has_more;
+      let nextPage = servicesState.next_page || (hasMore ? 2 : null);
+
+      while (hasMore && nextPage){
+        const batchResp = await request({
+          mode: 'services_batch',
+          page: nextPage,
+          limit: servicesBatch
+        });
+        servicesState = batchResp.result && batchResp.result.state ? batchResp.result.state : {};
+        if (typeof servicesState.total !== 'undefined' && servicesState.total !== null){
+          servicesTotal = servicesState.total;
+        }
+        if (typeof servicesState.completed !== 'undefined'){
+          servicesProcessed = servicesState.completed;
+        } else {
+          servicesProcessed += servicesState.processed || 0;
+        }
+        updateServicesProgress();
+        hasMore = !!servicesState.has_more;
+        nextPage = servicesState.next_page || (hasMore ? (nextPage + 1) : null);
+      }
     }
 
     updateProgress(1, branchName + ': ' + t('stageDone', 'Синхронизация завершена'));
 
-    const summary = branchName + ': ' + (servicesProcessed || 0) + ' ' + t('labelServices', 'услуг') + ', ' + (staffCount || 0) + ' ' + t('labelStaff', 'сотрудников') + ', ' + (photosProcessed || 0) + ' ' + t('labelPhotos', 'фото');
+    const summaryParts = [];
+    if (settings.services){
+      summaryParts.push((servicesProcessed || 0) + ' ' + t('labelServices', 'услуг'));
+    }
+    if (settings.staff){
+      summaryParts.push((staffCount || 0) + ' ' + t('labelStaff', 'сотрудников'));
+      summaryParts.push((photosProcessed || 0) + ' ' + t('labelPhotos', 'фото'));
+    }
+    const summary = branchName + ': ' + (summaryParts.length ? summaryParts.join(', ') : t('stageDone', 'Синхронизация завершена'));
     if (errors.length){
       appendLog(summary + ' — ' + errors.join('; '), 'error');
     } else {
@@ -247,9 +292,16 @@ jQuery(function($){
     };
   }
 
-  if ($syncButton.length){
-    $syncButton.on('click', async function(){
-      setSyncState(true);
+  if ($syncButtons.length){
+    $syncButtons.on('click', async function(){
+      const $button = $(this);
+      const mode = ($button.data('sync-mode') || 'all').toString();
+      const options = {
+        staff: mode === 'all' || mode === 'staff',
+        services: mode === 'all' || mode === 'services'
+      };
+
+      setSyncState(true, $button);
       $log.empty();
       try {
         const status = await fetchStatus();
@@ -260,7 +312,7 @@ jQuery(function($){
         setProgress(0, syncConfig.i18n ? syncConfig.i18n.syncing : 'Syncing…');
         let completed = 0;
         for (const branch of branches){
-          await syncBranch(branch, completed, branches.length);
+          await syncBranch(branch, completed, branches.length, options);
           completed++;
         }
         setProgress(100, syncConfig.i18n ? syncConfig.i18n.done : 'Done');
