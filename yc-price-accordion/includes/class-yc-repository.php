@@ -431,8 +431,21 @@ class YC_Repository {
                 continue;
             }
             $ids[] = $staff_id;
-            $sort_order = isset($existing_orders[$staff_id]) ? (int) $existing_orders[$staff_id] : null;
-            if ($sort_order === null || $sort_order === 0) {
+            $existing_order = isset($existing_orders[$staff_id]) ? (int) $existing_orders[$staff_id] : 0;
+            $incoming_order = 0;
+            if (isset($row['sort_order']) && is_numeric($row['sort_order'])) {
+                $incoming_order = (int) $row['sort_order'];
+            } elseif (isset($row['weight']) && is_numeric($row['weight'])) {
+                $incoming_order = (int) $row['weight'];
+            }
+
+            if ($existing_order !== 0 && $existing_order !== 500) {
+                $sort_order = $existing_order;
+            } elseif ($incoming_order > 0) {
+                $sort_order = $incoming_order;
+            } elseif ($existing_order > 0) {
+                $sort_order = $existing_order;
+            } else {
                 $sort_order = 500;
             }
             $raw_json = wp_json_encode($row);
