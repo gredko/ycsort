@@ -123,7 +123,18 @@ class YC_Sync_Service {
         );
 
         $reset = isset($args['reset']) ? (bool) $args['reset'] : false;
+        $preserved_orders = array();
         if ($reset) {
+            $existing_rows = YC_Repository::get_staff_index($company_id);
+            if (is_array($existing_rows)) {
+                foreach ($existing_rows as $sid => $row) {
+                    $staff_id = (int) $sid;
+                    $order = isset($row['sort_order']) ? (int) $row['sort_order'] : 0;
+                    if ($staff_id > 0 && $order > 0) {
+                        $preserved_orders[$staff_id] = $order;
+                    }
+                }
+            }
             YC_Repository::purge_company($company_id);
             if (class_exists('YC_Storage')) {
                 YC_Storage::purge_company($company_id);
@@ -139,7 +150,7 @@ class YC_Sync_Service {
         }
 
         if (!empty($staff_data)) {
-            $stored = self::store_staff($company_id, $staff_data, false);
+            $stored = self::store_staff($company_id, $staff_data, false, $preserved_orders);
             $result['staff'] = true;
             $result['stats']['staff'] = isset($stored['total']) ? (int) $stored['total'] : count($staff_data);
         } else {
@@ -147,7 +158,7 @@ class YC_Sync_Service {
             if (!isset($services_resp['error'])) {
                 $fallback = self::extract_staff_from_services(is_array($services_resp) ? $services_resp : array());
                 if (!empty($fallback)) {
-                    $stored = self::store_staff($company_id, $fallback, false);
+                    $stored = self::store_staff($company_id, $fallback, false, $preserved_orders);
                     $result['staff'] = true;
                     $result['stats']['staff'] = isset($stored['total']) ? (int) $stored['total'] : count($fallback);
                 }
@@ -320,10 +331,21 @@ class YC_Sync_Service {
         return $result;
     }
 
-    protected static function store_staff(int $company_id, array $staff_rows, bool $download_photos) : array {
+    protected static function store_staff(int $company_id, array $staff_rows, bool $download_photos, array $preserve_orders = array()) : array {
         $existing = YC_Repository::get_staff_index($company_id);
         $normalized = array();
         $images = array();
+        $preserved_map = array();
+        if (!empty($preserve_orders)) {
+            foreach ($preserve_orders as $sid => $order) {
+                $staff_id = (int) $sid;
+                $weight = (int) $order;
+                if ($staff_id <= 0 || $weight <= 0) {
+                    continue;
+                }
+                $preserved_map[$staff_id] = $weight;
+            }
+        }
         foreach ($staff_rows as $row) {
             if (!is_array($row)) {
                 continue;
@@ -365,6 +387,9 @@ class YC_Sync_Service {
                 } elseif (isset($existing[$sid]['sort_order'])) {
                     $row['sort_order'] = (int) $existing[$sid]['sort_order'];
                 }
+            }
+            if (isset($preserved_map[$sid])) {
+                $row['sort_order'] = $preserved_map[$sid];
             }
             $row['id'] = $sid;
             if (!isset($row['name'])) {
