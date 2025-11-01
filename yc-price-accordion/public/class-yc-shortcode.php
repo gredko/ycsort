@@ -428,13 +428,6 @@ class YC_Shortcode {
       echo '</div>';
     }
 
-    // Specialists block (optional, before price) — now with extra spacing
-    if (yc_pa_show_staff()){
-      echo '<div class="yc-staff-section">';
-      echo self::render_staff_grid($branches, $filter_branch, $filter_cat, $filter_ids);
-      echo '</div>';
-    }
-
     // Price block with top margin for separation
     echo '<div class="yc-accordion-section">';
     $yc_price_t = esc_html( get_option('yc_title_price','Прайс - лист') );
@@ -477,6 +470,13 @@ class YC_Shortcode {
       echo '</div></div>';
     }
     echo '</div></div>'; // accordion and section
+
+    // Specialists block (optional, displayed after price)
+    if (yc_pa_show_staff()){
+      echo '<div class="yc-staff-section">';
+      echo self::render_staff_grid($branches, $filter_branch, $filter_cat, $filter_ids);
+      echo '</div>';
+    }
 
     return ob_get_clean();
   }

@@ -216,10 +216,27 @@ class YC_Repository {
             }
             $ids[] = $cat_id;
             $title = '';
-            if (isset($category['title'])) {
-                $title = (string) $category['title'];
-            } elseif (isset($category['name'])) {
-                $title = (string) $category['name'];
+            $candidates = array('title', 'name', 'label', 'title_full', 'titleFull', 'category_title', 'categoryTitle', 'category_name', 'categoryName', 'group', 'group_name', 'group_title');
+            foreach ($candidates as $candidate) {
+                if (!empty($category[$candidate])) {
+                    $title = (string) $category[$candidate];
+                    break;
+                }
+            }
+            if ($title === '' && isset($category['category']) && is_array($category['category'])) {
+                foreach ($candidates as $candidate) {
+                    if (!empty($category['category'][$candidate])) {
+                        $title = (string) $category['category'][$candidate];
+                        break;
+                    }
+                }
+                if ($title === '') {
+                    if (isset($category['category']['title'])) {
+                        $title = (string) $category['category']['title'];
+                    } elseif (isset($category['category']['name'])) {
+                        $title = (string) $category['category']['name'];
+                    }
+                }
             }
             $title = wp_strip_all_tags($title);
 
@@ -260,6 +277,7 @@ class YC_Repository {
         $now   = self::now();
         $ids   = array();
         $relations = array();
+        $existing_orders = self::get_existing_service_orders($company_id);
         foreach ($services as $service) {
             if (!is_array($service)) {
                 continue;
@@ -290,8 +308,15 @@ class YC_Repository {
             $duration  = isset($service['duration']) ? (int) $service['duration'] : (isset($service['length']) ? (int) $service['length'] : 0);
             $title     = isset($service['title']) ? (string) $service['title'] : (isset($service['name']) ? (string) $service['name'] : '');
             $description = isset($service['comment']) ? (string) $service['comment'] : (isset($service['description']) ? (string) $service['description'] : '');
+            if (function_exists('yc_pa_normalize_service_description')) {
+                $description = yc_pa_normalize_service_description($description);
+            }
             $is_active = isset($service['active']) ? (int) !!$service['active'] : 1;
-            $sort      = isset($service['weight']) ? (int) $service['weight'] : (isset($service['sort_order']) ? (int) $service['sort_order'] : 0);
+            if (isset($existing_orders[$service_id])) {
+                $sort = (int) $existing_orders[$service_id];
+            } else {
+                $sort = isset($service['weight']) ? (int) $service['weight'] : (isset($service['sort_order']) ? (int) $service['sort_order'] : 0);
+            }
 
             $wpdb->replace(
                 $table,
@@ -603,6 +628,7 @@ class YC_Repository {
         $ids   = array();
         $relations = array();
 
+        $existing_orders = self::get_existing_service_orders($company_id);
         foreach ($services as $service) {
             if (!is_array($service)) {
                 continue;
@@ -635,8 +661,15 @@ class YC_Repository {
             $duration  = isset($service['duration']) ? (int) $service['duration'] : (isset($service['length']) ? (int) $service['length'] : 0);
             $title     = isset($service['title']) ? (string) $service['title'] : (isset($service['name']) ? (string) $service['name'] : '');
             $description = isset($service['comment']) ? (string) $service['comment'] : (isset($service['description']) ? (string) $service['description'] : '');
+            if (function_exists('yc_pa_normalize_service_description')) {
+                $description = yc_pa_normalize_service_description($description);
+            }
             $is_active = isset($service['active']) ? (int) !!$service['active'] : 1;
-            $sort      = isset($service['weight']) ? (int) $service['weight'] : (isset($service['sort_order']) ? (int) $service['sort_order'] : 0);
+            if (isset($existing_orders[$service_id])) {
+                $sort = (int) $existing_orders[$service_id];
+            } else {
+                $sort = isset($service['weight']) ? (int) $service['weight'] : (isset($service['sort_order']) ? (int) $service['sort_order'] : 0);
+            }
 
             $wpdb->replace(
                 $table,
@@ -693,6 +726,29 @@ class YC_Repository {
             'relations' => $relation_count,
             'state'     => $state,
         );
+    }
+
+    protected static function get_existing_service_orders(int $company_id) : array {
+        global $wpdb;
+        $table = self::table_services();
+        $rows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT service_id, sort_order FROM $table WHERE company_id = %d",
+                $company_id
+            ),
+            ARRAY_A
+        );
+        $map = array();
+        if (is_array($rows)) {
+            foreach ($rows as $row) {
+                $sid = isset($row['service_id']) ? (int) $row['service_id'] : 0;
+                if ($sid <= 0) {
+                    continue;
+                }
+                $map[$sid] = isset($row['sort_order']) ? (int) $row['sort_order'] : 0;
+            }
+        }
+        return $map;
     }
 
     protected static function store_service_relations_partial(int $company_id, array $map, bool $reset = false) : void {
