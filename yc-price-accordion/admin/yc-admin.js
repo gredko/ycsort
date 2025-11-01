@@ -154,7 +154,8 @@ jQuery(function($){
     updateProgress(0, branchName + ': ' + t('stageStart', 'Подготовка…'));
 
     const staffList = await request({
-      mode: 'staff_list'
+      mode: 'staff_list',
+      reset: true
     });
     const staffStats = (staffList.result && staffList.result.stats) ? staffList.result.stats : {};
     const staffCount = staffStats.staff || 0;
