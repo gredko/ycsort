@@ -13,7 +13,14 @@
 .yc-acc-content{max-height:0;overflow:hidden;transition:max-height .25s ease;padding:0 14px}
 .yc-acc-content[aria-hidden="false"]{padding:6px 14px 12px;overflow:visible}
 .yc-cat{margin-top:8px}
-.yc-cat-title{font-weight:700;margin:6px 0 4px;font-size:15px}
+.yc-cat-title{
+  font-weight:700;
+  margin:14px 0 10px;
+  font-size:20px;
+  line-height:1.35;
+  padding-bottom:6px;
+  border-bottom:1px solid rgba(15,23,42,.12);
+}
 .yc-services{list-style:none;margin:0;padding:0}
 .yc-service{padding:10px 0;border-bottom:1px solid #f1f5f9;position:relative}
 .yc-service:last-child{border-bottom:none}
@@ -30,6 +37,7 @@
   .yc-acc-icon{font-size:16px}
   .yc-acc-content{padding:0 12px}
   .yc-acc-content[aria-hidden="false"]{padding:4px 12px 10px}
+  .yc-cat-title{font-size:18px;margin:12px 0 8px;padding-bottom:4px}
   .yc-service{padding:8px 0}
   .yc-service-row{gap:6px;align-items:flex-start}
   .yc-service-right{gap:6px;flex-direction:column;align-items:flex-end}
