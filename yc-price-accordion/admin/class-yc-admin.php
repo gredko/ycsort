@@ -301,6 +301,7 @@ class YC_Admin {
                     $group_key = $group_id . '|' . $normalized_title;
                     if (!isset($grouped[$group_key])) {
                         $grouped[$group_key] = array(
+                            'id'       => $group_id,
                             'title'    => $group_name,
                             'services' => array(),
                         );
@@ -337,6 +338,7 @@ class YC_Admin {
             }
 
             foreach ($grouped as $category) {
+                $category_id = isset($category['id']) ? (int) $category['id'] : 0;
                 $category_title = isset($category['title']) ? $category['title'] : '';
                 $items = isset($category['services']) && is_array($category['services']) ? $category['services'] : array();
                 if (empty($items)) {
@@ -354,8 +356,15 @@ class YC_Admin {
                     return strcasecmp($titleA, $titleB);
                 });
 
+                $category_name = $category_title !== '' ? $category_title : __('Без категории', 'yc-price-accordion');
+                $category_label = esc_html($category_name);
+                if ($category_id > 0) {
+                    $category_label .= ' (ID ' . $category_id . ')';
+                }
+                $category_label .= ' (' . (int) count($items) . ')';
+
                 echo '<div class="yc-service-category">';
-                echo '<h4>' . esc_html($category_title !== '' ? $category_title : esc_html__('Без категории', 'yc-price-accordion')) . ' (' . (int) count($items) . ')</h4>';
+                echo '<h4>' . $category_label . '</h4>';
                 echo '<table class="widefat striped yc-services-table">';
                 echo '<thead><tr>';
                 echo '<th>' . esc_html__('Услуга', 'yc-price-accordion') . '</th>';
