@@ -253,6 +253,35 @@ function yc_pa_group_staff_member(&$groups, $staff, $branch_meta){
   );
 }
 
+if (!function_exists('yc_pa_normalize_service_description')) {
+  function yc_pa_normalize_service_description($value){
+    if ($value === null) {
+      return '';
+    }
+
+    if (!is_scalar($value)) {
+      $value = '';
+    }
+
+    $text = trim((string) $value);
+    if ($text === '') {
+      return '';
+    }
+
+    $plain = trim(preg_replace('/\s+/u', ' ', wp_strip_all_tags($text)));
+    if ($plain === '') {
+      return '';
+    }
+
+    $numeric_candidate = str_replace(',', '.', $plain);
+    if (is_numeric($numeric_candidate) && abs((float) $numeric_candidate) < 0.000001) {
+      return '';
+    }
+
+    return $text;
+  }
+}
+
 function yc_pa_finalize_staff_groups($groups){
   if (!is_array($groups)) return array();
   foreach ($groups as $key => $entry) {

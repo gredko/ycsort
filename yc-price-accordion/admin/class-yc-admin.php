@@ -370,6 +370,9 @@ class YC_Admin {
                 foreach ($items as $service) {
                     $title = isset($service['title']) ? $service['title'] : '';
                     $description = isset($service['description']) ? $service['description'] : '';
+                    if (function_exists('yc_pa_normalize_service_description')) {
+                        $description = yc_pa_normalize_service_description($description);
+                    }
                     $price = self::format_service_price($service);
                     $duration = self::format_service_duration($service);
                     $is_active = !empty($service['is_active']);
