@@ -50,6 +50,10 @@
 .yc-staff-branch-controls .regular-text{min-width:220px;flex:1}
 
 .yc-services-list{display:flex;flex-direction:column;gap:24px;margin-top:24px}
+.yc-shortcode-help ul{margin:8px 0 16px 20px;list-style:disc}
+.yc-shortcode-help li{margin:4px 0}
+.yc-shortcode-help code{background:#f1f5f9;border-radius:4px;padding:2px 6px;font-family:monospace;font-size:13px}
+.yc-shortcode-table td{vertical-align:top}
 .yc-service-branch{border:1px solid #e2e8f0;border-radius:12px;padding:20px;background:#fff;box-shadow:0 3px 8px rgba(15,23,42,0.03)}
 .yc-service-branch-header{display:flex;flex-direction:column;gap:8px;margin-bottom:4px}
 .yc-service-branch h3{margin:0}
