@@ -124,9 +124,6 @@ class YC_Shortcode {
         $parts[] = $service[$key];
       }
     }
-    if (!empty($service['id'])) {
-      $parts[] = (string) intval($service['id']);
-    }
     if (!empty($category_label) && is_string($category_label)) {
       $parts[] = $category_label;
     }
@@ -542,7 +539,7 @@ class YC_Shortcode {
     $search_instance++;
     $search_id = 'yc-service-search-' . $search_instance;
     $search_label = esc_html__('Поиск по услугам', 'yc-price-accordion');
-    $search_placeholder = esc_attr__('Начните вводить название или ID услуги…', 'yc-price-accordion');
+    $search_placeholder = esc_attr__('Начните вводить название услуги…', 'yc-price-accordion');
     $search_empty = esc_html__('По вашему запросу услуги не найдены.', 'yc-price-accordion');
 
     echo '<div class="yc-price-wrapper" data-search-container="1">';
@@ -587,16 +584,10 @@ class YC_Shortcode {
             }
             $search_index = self::build_service_search_index($svc, $branch, $cat_label);
             $data_attrs = '';
-            if ($sid > 0) {
-              $data_attrs .= ' data-service-id="' . esc_attr($sid) . '"';
-            }
             if ($search_index !== '') {
               $data_attrs .= ' data-search="' . esc_attr($search_index) . '"';
             }
             echo '<li class="yc-service"' . $data_attrs . '><div class="yc-service-row"><div class="yc-service-name">'.esc_html($name);
-            if ($sid > 0) {
-              echo '<span class="yc-service-id">' . sprintf(esc_html__('ID %d', 'yc-price-accordion'), $sid) . '</span>';
-            }
             echo '</div><div class="yc-service-right"><div class="yc-service-price">'.esc_html($price_txt).'</div>';
             if ($book_url) echo '<a class="yc-book-btn" href="'.esc_url($book_url).'" target="_blank" rel="noopener nofollow">Записаться</a>';
             echo '</div></div></li>';
