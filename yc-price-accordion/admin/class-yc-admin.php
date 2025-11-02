@@ -29,7 +29,14 @@ class YC_Admin {
     }
 
     public static function menu() : void {
-        add_options_page('YClients Прайс', 'YClients Прайс', 'manage_options', 'yc-price-settings', [__CLASS__, 'render_page']);
+        add_menu_page(
+            __('YClients Прайс', 'yc-price-accordion'),
+            __('YClients Прайс', 'yc-price-accordion'),
+            'manage_options',
+            'yc-price-settings',
+            [__CLASS__, 'render_page'],
+            'dashicons-clipboard'
+        );
     }
 
     public static function settings() : void {
@@ -62,7 +69,7 @@ class YC_Admin {
     }
 
     public static function assets(string $hook) : void {
-        if ($hook !== 'settings_page_yc-price-settings') {
+        if (strpos((string) $hook, 'yc-price-settings') === false) {
             return;
         }
         wp_enqueue_style('yc-admin', YC_PA_URL . 'admin/yc-admin.css', array(), YC_PA_VER);
@@ -277,18 +284,28 @@ class YC_Admin {
             return;
         }
 
+        $categories_by_branch = array();
+        foreach ($branches as $branch) {
+            $branch_id = isset($branch['id']) ? (int) $branch['id'] : 0;
+            $categories = YC_API::get_categories($branch_id);
+            if (!is_array($categories)) {
+                $categories = array();
+            }
+            $categories_by_branch[$branch_id] = $categories;
+        }
+
+        self::render_shortcode_help($branches, $categories_by_branch);
+
         echo '<div class="yc-services-list">';
 
         foreach ($branches as $branch) {
-            $services = YC_API::get_services($branch['id']);
+            $branch_id = isset($branch['id']) ? (int) $branch['id'] : 0;
+            $services = YC_API::get_services($branch_id);
             $service_count = is_array($services) ? count($services) : 0;
             $active_count = 0;
             $grouped = array();
             $last_updated = self::get_services_last_updated(is_array($services) ? $services : array());
-            $category_map = YC_API::get_categories($branch['id']);
-            if (!is_array($category_map)) {
-                $category_map = array();
-            }
+            $category_map = isset($categories_by_branch[$branch_id]) ? $categories_by_branch[$branch_id] : array();
 
             if (!empty($services) && is_array($services)) {
                 foreach ($services as $service) {
@@ -415,6 +432,54 @@ class YC_Admin {
         }
 
         echo '</div>';
+        echo '</div>';
+    }
+
+    protected static function render_shortcode_help(array $branches, array $categories_by_branch) : void {
+        echo '<div class="yc-section yc-shortcode-help">';
+        echo '<h2>' . esc_html__('Шорткоды и фильтры', 'yc-price-accordion') . '</h2>';
+        echo '<p class="description">' . esc_html__('Используйте шорткод [yclients_price] для вывода прайс-листа на сайте. Атрибут branch_id ограничивает данные одним филиалом, а category_id или category_ids — списком категорий.', 'yc-price-accordion') . '</p>';
+        echo '<ul>';
+        echo '<li><code>[yclients_price]</code> — ' . esc_html__('все филиалы и категории', 'yc-price-accordion') . '</li>';
+        echo '<li><code>[yclients_price branch_id="123"]</code> — ' . esc_html__('конкретный филиал', 'yc-price-accordion') . '</li>';
+        echo '<li><code>[yclients_price branch_id="123" category_ids="10,11,12"]</code> — ' . esc_html__('несколько категорий в заданном порядке', 'yc-price-accordion') . '</li>';
+        echo '</ul>';
+        echo '<p class="description">' . esc_html__('Указанный порядок идентификаторов в атрибуте category_ids сохраняется при отображении на витрине.', 'yc-price-accordion') . '</p>';
+
+        echo '<h3>' . esc_html__('Категории по филиалам', 'yc-price-accordion') . '</h3>';
+        echo '<p class="description">' . esc_html__('Используйте ID категорий из таблицы ниже при формировании шорткода.', 'yc-price-accordion') . '</p>';
+        echo '<table class="widefat striped yc-shortcode-table">';
+        echo '<thead><tr>';
+        echo '<th>' . esc_html__('Филиал', 'yc-price-accordion') . '</th>';
+        echo '<th>' . esc_html__('ID категории', 'yc-price-accordion') . '</th>';
+        echo '<th>' . esc_html__('Название', 'yc-price-accordion') . '</th>';
+        echo '</tr></thead><tbody>';
+
+        foreach ($branches as $branch) {
+            $branch_id = isset($branch['id']) ? (int) $branch['id'] : 0;
+            $branch_title = isset($branch['title']) ? $branch['title'] : '';
+            if ($branch_title === '') {
+                $branch_title = sprintf(__('Филиал %d', 'yc-price-accordion'), $branch_id);
+            }
+            $categories = isset($categories_by_branch[$branch_id]) ? $categories_by_branch[$branch_id] : array();
+            if (empty($categories)) {
+                echo '<tr>';
+                echo '<td>' . esc_html($branch_title) . ' (ID ' . $branch_id . ')</td>';
+                echo '<td colspan="2">' . esc_html__('Категории отсутствуют. Выполните синхронизацию.', 'yc-price-accordion') . '</td>';
+                echo '</tr>';
+                continue;
+            }
+
+            foreach ($categories as $category_id => $category_title) {
+                echo '<tr>';
+                echo '<td>' . esc_html($branch_title) . ' (ID ' . $branch_id . ')</td>';
+                echo '<td>' . (int) $category_id . '</td>';
+                echo '<td>' . esc_html($category_title !== '' ? $category_title : __('Без категории', 'yc-price-accordion')) . '</td>';
+                echo '</tr>';
+            }
+        }
+
+        echo '</tbody></table>';
         echo '</div>';
     }
 

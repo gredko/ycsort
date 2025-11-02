@@ -408,6 +408,13 @@ class YC_Shortcode {
 
     // Build dataset for price list
     $dataset = array();
+    $category_order_map = array();
+    if (!empty($filter_ids)) {
+      foreach ($filter_ids as $index => $value) {
+        $category_order_map[(int) $value] = $index;
+      }
+    }
+
     foreach($branches as $b){
       $cid = intval($b['id']);
       if ($filter_branch && $cid !== $filter_branch) continue;
@@ -437,10 +444,33 @@ class YC_Shortcode {
           'category_id'    => $cat_id,
           'category_name'  => $cat_name,
           'category_label' => $cat_label,
-          'items'          => $row['items']
+          'items'          => $row['items'],
+          'original_index' => count($categories),
         );
       }
-      usort($categories,function($a,$b){ return strcasecmp($a['category_name'],$b['category_name']); });
+      if (!empty($filter_ids)) {
+        usort($categories, static function($a, $b) use ($category_order_map) {
+          $aId = isset($a['category_id']) ? (int) $a['category_id'] : 0;
+          $bId = isset($b['category_id']) ? (int) $b['category_id'] : 0;
+          $aOrder = array_key_exists($aId, $category_order_map) ? $category_order_map[$aId] : (isset($a['original_index']) ? (int) $a['original_index'] : 0);
+          $bOrder = array_key_exists($bId, $category_order_map) ? $category_order_map[$bId] : (isset($b['original_index']) ? (int) $b['original_index'] : 0);
+          if ($aOrder === $bOrder) {
+            $aLabel = isset($a['category_name']) ? (string) $a['category_name'] : '';
+            $bLabel = isset($b['category_name']) ? (string) $b['category_name'] : '';
+            return strcasecmp($aLabel, $bLabel);
+          }
+          return $aOrder <=> $bOrder;
+        });
+      } else {
+        usort($categories,function($a,$b){ return strcasecmp($a['category_name'],$b['category_name']); });
+      }
+      foreach ($categories as &$category) {
+        if (isset($category['original_index'])) {
+          unset($category['original_index']);
+        }
+      }
+      unset($category);
+
       if (!empty($categories)) {
         $dataset[] = array('branch'=>$b,'categories'=>$categories);
       }
