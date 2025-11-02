@@ -296,6 +296,18 @@ class YC_Admin {
 
         self::render_shortcode_help($branches, $categories_by_branch);
 
+        $search_label = esc_html__('Поиск по услугам', 'yc-price-accordion');
+        $search_placeholder = esc_attr__('Начните вводить название или ID услуги…', 'yc-price-accordion');
+        $search_hint = esc_html__('Фильтрация работает по названию, описанию, ID, категории и филиалу.', 'yc-price-accordion');
+        $search_empty = esc_html__('По вашему запросу услуги не найдены.', 'yc-price-accordion');
+
+        echo '<div class="yc-services-search">';
+        echo '<label for="yc-services-search-input">' . $search_label . '</label>';
+        echo '<input type="search" id="yc-services-search-input" class="yc-services-search-input" placeholder="' . $search_placeholder . '" autocomplete="off" />';
+        echo '<p class="description">' . $search_hint . '</p>';
+        echo '</div>';
+        echo '<p class="yc-services-search-empty" hidden>' . $search_empty . '</p>';
+
         echo '<div class="yc-services-list">';
 
         foreach ($branches as $branch) {
@@ -409,10 +421,16 @@ class YC_Admin {
                     $status_class = $is_active ? 'is-active' : 'is-inactive';
                     $status_label = $is_active ? esc_html__('Активна', 'yc-price-accordion') : esc_html__('Выключена', 'yc-price-accordion');
                     $staff = self::format_service_staff_list($service);
+                    $service_id = isset($service['id']) ? (int) $service['id'] : 0;
+                    $search_index = self::build_service_search_index($service, $branch, $category_name);
+                    $search_attr = $search_index !== '' ? ' data-search="' . esc_attr($search_index) . '"' : '';
 
-                    echo '<tr>';
+                    echo '<tr' . $search_attr . '>';
                     echo '<td>';
                     echo '<strong>' . ($title !== '' ? esc_html($title) : '&#8212;') . '</strong>';
+                    if ($service_id > 0) {
+                        echo '<div class="yc-service-id">' . sprintf(esc_html__('ID %d', 'yc-price-accordion'), $service_id) . '</div>';
+                    }
                     if ($description !== '') {
                         echo '<div class="yc-service-description">' . wp_kses_post(wpautop($description)) . '</div>';
                     }
@@ -787,6 +805,57 @@ class YC_Admin {
         }
 
         return '';
+    }
+
+    protected static function build_service_search_index(array $service, array $branch, string $category_name) : string {
+        $parts = array();
+        if (!empty($service['id'])) {
+            $parts[] = (string) (int) $service['id'];
+        }
+        if (!empty($service['title'])) {
+            $parts[] = (string) $service['title'];
+        }
+        if (!empty($service['name'])) {
+            $parts[] = (string) $service['name'];
+        }
+        if (!empty($service['description'])) {
+            $parts[] = (string) $service['description'];
+        }
+        if ($category_name !== '') {
+            $parts[] = $category_name;
+        }
+        if (!empty($branch['title'])) {
+            $parts[] = (string) $branch['title'];
+        }
+        if (!empty($branch['id'])) {
+            $parts[] = (string) (int) $branch['id'];
+        }
+        return self::normalize_search_index($parts);
+    }
+
+    protected static function normalize_search_index($value) : string {
+        if (is_array($value)) {
+            $value = implode(' ', array_map(static function($item) {
+                return is_scalar($item) ? (string) $item : '';
+            }, $value));
+        }
+        $value = (string) $value;
+        if ($value === '') {
+            return '';
+        }
+        $value = wp_strip_all_tags($value);
+        $value = html_entity_decode($value, ENT_QUOTES, 'UTF-8');
+        $value = preg_replace('/\s+/u', ' ', $value);
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+        if (function_exists('mb_strtolower')) {
+            $value = mb_strtolower($value, 'UTF-8');
+        } else {
+            $value = strtolower($value);
+        }
+        return $value;
     }
 
     protected static function get_services_last_updated(array $services) : string {
