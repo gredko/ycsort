@@ -18,10 +18,12 @@ class YC_Shortcode {
     // enqueue on front
     if(!is_admin()){
       wp_enqueue_style('yc-accordion');
-      wp_enqueue_style('yc-staff-grid');
       wp_enqueue_style('yc-price-public');
       wp_enqueue_script('yc-accordion');
-      wp_enqueue_script('yc-staff-sort');
+      if (function_exists('yc_pa_show_staff') && yc_pa_show_staff()) {
+        wp_enqueue_style('yc-staff-grid');
+        wp_enqueue_script('yc-staff-sort');
+      }
     }
   }
 
@@ -87,6 +89,54 @@ class YC_Shortcode {
       }
     }
     return sprintf(__('Категория #%d', 'yc-price-accordion'), $cat_id);
+  }
+
+  private static function normalize_search_index($value){
+    if (is_array($value)) {
+      $value = implode(' ', array_map(static function($item){
+        return is_scalar($item) ? (string) $item : '';
+      }, $value));
+    }
+    $value = (string) $value;
+    if ($value === '') {
+      return '';
+    }
+    $value = wp_strip_all_tags($value);
+    $value = html_entity_decode($value, ENT_QUOTES, 'UTF-8');
+    $value = preg_replace('/\s+/u', ' ', $value);
+    $value = trim($value);
+    if ($value === '') {
+      return '';
+    }
+    if (function_exists('mb_strtolower')) {
+      $value = mb_strtolower($value, 'UTF-8');
+    } else {
+      $value = strtolower($value);
+    }
+    return $value;
+  }
+
+  private static function build_service_search_index(array $service, array $branch, $category_label){
+    $parts = array();
+    $name_candidates = array('title', 'name');
+    foreach ($name_candidates as $key) {
+      if (!empty($service[$key]) && is_string($service[$key])) {
+        $parts[] = $service[$key];
+      }
+    }
+    if (!empty($service['id'])) {
+      $parts[] = (string) intval($service['id']);
+    }
+    if (!empty($category_label) && is_string($category_label)) {
+      $parts[] = $category_label;
+    }
+    if (!empty($branch['title']) && is_string($branch['title'])) {
+      $parts[] = $branch['title'];
+    }
+    if (!empty($service['description']) && is_string($service['description'])) {
+      $parts[] = $service['description'];
+    }
+    return self::normalize_search_index($parts);
   }
 
   private static function render_staff_grid($branches, $filter_branch, $filter_single, $filter_multi){
@@ -488,6 +538,20 @@ class YC_Shortcode {
       echo '</div>';
     }
 
+    static $search_instance = 0;
+    $search_instance++;
+    $search_id = 'yc-service-search-' . $search_instance;
+    $search_label = esc_html__('Поиск по услугам', 'yc-price-accordion');
+    $search_placeholder = esc_attr__('Начните вводить название или ID услуги…', 'yc-price-accordion');
+    $search_empty = esc_html__('По вашему запросу услуги не найдены.', 'yc-price-accordion');
+
+    echo '<div class="yc-price-wrapper" data-search-container="1">';
+    echo '<div class="yc-price-search">';
+    echo '<label for="' . esc_attr($search_id) . '">' . $search_label . '</label>';
+    echo '<input type="search" id="' . esc_attr($search_id) . '" class="yc-service-search" placeholder="' . $search_placeholder . '" autocomplete="off" />';
+    echo '</div>';
+    echo '<div class="yc-search-empty" hidden>' . $search_empty . '</div>';
+
     // Price block with top margin for separation
     echo '<div class="yc-accordion-section">';
     $yc_price_t = esc_html( get_option('yc_title_price','Прайс - лист') );
@@ -521,7 +585,19 @@ class YC_Shortcode {
               $branch_arr = isset($svc['branch'])?$svc['branch']:array('id'=>intval($svc['company_id']));
               $book_url = yc_pa_build_booking_url($branch_arr, intval($svc['company_id']), $sid);
             }
-            echo '<li class="yc-service"><div class="yc-service-row"><div class="yc-service-name">'.esc_html($name).'</div><div class="yc-service-right"><div class="yc-service-price">'.esc_html($price_txt).'</div>';
+            $search_index = self::build_service_search_index($svc, $branch, $cat_label);
+            $data_attrs = '';
+            if ($sid > 0) {
+              $data_attrs .= ' data-service-id="' . esc_attr($sid) . '"';
+            }
+            if ($search_index !== '') {
+              $data_attrs .= ' data-search="' . esc_attr($search_index) . '"';
+            }
+            echo '<li class="yc-service"' . $data_attrs . '><div class="yc-service-row"><div class="yc-service-name">'.esc_html($name);
+            if ($sid > 0) {
+              echo '<span class="yc-service-id">' . sprintf(esc_html__('ID %d', 'yc-price-accordion'), $sid) . '</span>';
+            }
+            echo '</div><div class="yc-service-right"><div class="yc-service-price">'.esc_html($price_txt).'</div>';
             if ($book_url) echo '<a class="yc-book-btn" href="'.esc_url($book_url).'" target="_blank" rel="noopener nofollow">Записаться</a>';
             echo '</div></div></li>';
           }
@@ -532,13 +608,7 @@ class YC_Shortcode {
       echo '</div></div>';
     }
     echo '</div></div>'; // accordion and section
-
-    // Specialists block (optional, displayed after price)
-    if (yc_pa_show_staff()){
-      echo '<div class="yc-staff-section">';
-      echo self::render_staff_grid($branches, $filter_branch, $filter_cat, $filter_ids);
-      echo '</div>';
-    }
+    echo '</div>'; // wrapper
 
     return ob_get_clean();
   }

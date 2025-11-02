@@ -332,4 +332,58 @@ jQuery(function($){
       setSyncState(false);
     });
   }
+
+  const $servicesSearchInput = $('.yc-services-search-input');
+  if ($servicesSearchInput.length){
+    const $searchEmpty = $('.yc-services-search-empty');
+    const normalize = function(value){
+      return (value || '').toString().toLowerCase().replace(/\s+/g, ' ').trim();
+    };
+    const filterServices = function(){
+      const query = normalize($servicesSearchInput.val());
+      const searching = query.length > 0;
+      let totalMatches = 0;
+
+      $('.yc-service-branch').each(function(){
+        const $branch = $(this);
+        const $categories = $branch.find('.yc-service-category');
+        if (!$categories.length){
+          $branch.toggle(!searching);
+          return;
+        }
+        let branchMatches = 0;
+        $categories.each(function(){
+          const $category = $(this);
+          const $rows = $category.find('tbody tr');
+          let categoryMatches = 0;
+          $rows.each(function(){
+            const $row = $(this);
+            const haystack = ($row.data('search') || '').toString();
+            const isMatch = !searching || (haystack && haystack.indexOf(query) !== -1);
+            $row.toggle(isMatch);
+            if (isMatch){
+              categoryMatches++;
+            }
+          });
+          $category.toggle(categoryMatches > 0 || !searching);
+          branchMatches += categoryMatches;
+        });
+        if (searching){
+          $branch.toggle(branchMatches > 0);
+        } else {
+          $branch.show();
+        }
+        totalMatches += branchMatches;
+      });
+
+      if (searching && totalMatches === 0){
+        $searchEmpty.removeAttr('hidden');
+      } else {
+        $searchEmpty.attr('hidden', 'hidden');
+      }
+    };
+
+    $servicesSearchInput.on('input', filterServices);
+    $servicesSearchInput.on('search', filterServices);
+  }
 });
