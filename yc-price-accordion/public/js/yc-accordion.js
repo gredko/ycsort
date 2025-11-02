@@ -93,15 +93,38 @@
         return;
       }
       var message = container.querySelector('.yc-search-empty');
+      var branches = Array.prototype.slice.call(container.querySelectorAll('.yc-acc-item')).map(function(item){
+        var header = item.querySelector('.yc-acc-header');
+        var panel = header ? header.nextElementSibling : null;
+        var categories = Array.prototype.slice.call(item.querySelectorAll('.yc-cat')).map(function(category){
+          var services = Array.prototype.slice.call(category.querySelectorAll('.yc-service')).map(function(service){
+            return {
+              element: service,
+              haystack: normalize(service.getAttribute('data-search'))
+            };
+          });
+          return {
+            element: category,
+            services: services
+          };
+        });
+        return {
+          element: item,
+          header: header,
+          panel: panel,
+          categories: categories
+        };
+      });
+
       var filterServices = function(){
         var query = normalize(input.value);
         var searching = query.length > 0;
         var wasActive = container.getAttribute('data-search-active') === '1';
         if (searching && !wasActive){
           container.setAttribute('data-search-active', '1');
-          container.querySelectorAll('.yc-acc-header').forEach(function(header){
-            if (!header.hasAttribute('data-prev-expanded')){
-              header.setAttribute('data-prev-expanded', header.getAttribute('aria-expanded') || 'false');
+          branches.forEach(function(branch){
+            if (branch.header && !branch.header.hasAttribute('data-prev-expanded')){
+              branch.header.setAttribute('data-prev-expanded', branch.header.getAttribute('aria-expanded') || 'false');
             }
           });
         } else if (!searching && wasActive){
@@ -109,58 +132,53 @@
         }
 
         var totalMatches = 0;
-        container.querySelectorAll('.yc-acc-item').forEach(function(item){
-          var header = item.querySelector('.yc-acc-header');
-          var panel = header ? header.nextElementSibling : null;
-          var categories = item.querySelectorAll('.yc-cat');
+        branches.forEach(function(branch){
           var branchMatches = 0;
 
-          categories.forEach(function(category){
-            var services = category.querySelectorAll('.yc-service');
+          branch.categories.forEach(function(category){
             var categoryMatches = 0;
-            services.forEach(function(service){
-              var haystack = (service.getAttribute('data-search') || '').toString();
-              var normalizedHaystack = haystack.toLowerCase();
-              var isMatch = !searching || (normalizedHaystack && normalizedHaystack.indexOf(query) !== -1);
-              if (!isMatch && searching){
-                var serviceId = (service.getAttribute('data-service-id') || '').toString();
-                if (serviceId && serviceId.indexOf(query) !== -1){
-                  isMatch = true;
-                }
-              }
-              service.style.display = isMatch ? '' : 'none';
+            category.services.forEach(function(service){
+              var isMatch = !searching || (service.haystack && service.haystack.indexOf(query) !== -1);
+              service.element.style.display = isMatch ? '' : 'none';
               if (isMatch){
                 categoryMatches++;
               }
             });
-            if (categoryMatches > 0 || !searching){
-              category.style.display = '';
+
+            if (searching){
+              category.element.style.display = categoryMatches > 0 ? '' : 'none';
             } else {
-              category.style.display = 'none';
+              category.element.style.display = '';
             }
+
             branchMatches += categoryMatches;
           });
 
           if (searching){
-            item.style.display = branchMatches > 0 ? '' : 'none';
-            if (header && panel){
-              setExpanded(header, panel, branchMatches > 0);
+            branch.element.style.display = branchMatches > 0 ? '' : 'none';
+            if (branch.header && branch.panel){
+              setExpanded(branch.header, branch.panel, branchMatches > 0);
             }
           } else {
-            item.style.display = '';
-            if (wasActive && header && panel){
-              var prev = header.getAttribute('data-prev-expanded');
+            branch.element.style.display = '';
+            if (wasActive && branch.header && branch.panel){
+              var prev = branch.header.getAttribute('data-prev-expanded');
               var prevExpanded = prev === 'true';
-              setExpanded(header, panel, prevExpanded);
-              header.removeAttribute('data-prev-expanded');
+              setExpanded(branch.header, branch.panel, prevExpanded);
+              if (branch.header){
+                branch.header.removeAttribute('data-prev-expanded');
+              }
             }
           }
+
           totalMatches += branchMatches;
         });
 
         if (!searching && wasActive){
-          container.querySelectorAll('.yc-acc-header').forEach(function(header){
-            header.removeAttribute('data-prev-expanded');
+          branches.forEach(function(branch){
+            if (branch.header){
+              branch.header.removeAttribute('data-prev-expanded');
+            }
           });
         }
 
