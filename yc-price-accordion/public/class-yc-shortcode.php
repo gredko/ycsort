@@ -535,19 +535,25 @@ class YC_Shortcode {
       echo '</div>';
     }
 
-    static $search_instance = 0;
-    $search_instance++;
-    $search_id = 'yc-service-search-' . $search_instance;
-    $search_label = esc_html__('Поиск по услугам', 'yc-price-accordion');
-    $search_placeholder = esc_attr__('Начните вводить название услуги…', 'yc-price-accordion');
-    $search_empty = esc_html__('По вашему запросу услуги не найдены.', 'yc-price-accordion');
+    $has_category_filter = ($filter_cat !== null || !empty($filter_ids));
+    $should_render_search = !$has_category_filter;
 
-    echo '<div class="yc-price-wrapper" data-search-container="1">';
-    echo '<div class="yc-price-search">';
-    echo '<label for="' . esc_attr($search_id) . '">' . $search_label . '</label>';
-    echo '<input type="search" id="' . esc_attr($search_id) . '" class="yc-service-search" placeholder="' . $search_placeholder . '" autocomplete="off" />';
-    echo '</div>';
-    echo '<div class="yc-search-empty" hidden>' . $search_empty . '</div>';
+    echo '<div class="yc-price-wrapper" data-search-container="' . ($should_render_search ? '1' : '0') . '">';
+
+    if ($should_render_search) {
+      static $search_instance = 0;
+      $search_instance++;
+      $search_id = 'yc-service-search-' . $search_instance;
+      $search_label = esc_html__('Поиск по услугам', 'yc-price-accordion');
+      $search_placeholder = esc_attr__('Начните вводить название услуги…', 'yc-price-accordion');
+      $search_empty = esc_html__('По вашему запросу услуги не найдены.', 'yc-price-accordion');
+
+      echo '<div class="yc-price-search">';
+      echo '<label for="' . esc_attr($search_id) . '">' . $search_label . '</label>';
+      echo '<input type="search" id="' . esc_attr($search_id) . '" class="yc-service-search" placeholder="' . $search_placeholder . '" autocomplete="off" />';
+      echo '</div>';
+      echo '<div class="yc-search-empty" hidden>' . $search_empty . '</div>';
+    }
 
     // Price block with top margin for separation
     echo '<div class="yc-accordion-section">';
