@@ -599,6 +599,23 @@ class YC_Shortcode {
       echo '</div></div>';
     }
     echo '</div></div>'; // accordion and section
+
+    $should_render_staff = function_exists('yc_pa_show_staff')
+      && yc_pa_show_staff()
+      && ($filter_cat !== null || !empty($filter_ids));
+
+    if ($should_render_staff) {
+      $staff_html = self::render_staff_grid(
+        $branches,
+        $filter_branch,
+        $filter_cat,
+        $filter_ids
+      );
+      if (!empty($staff_html)) {
+        echo $staff_html;
+      }
+    }
+
     echo '</div>'; // wrapper
 
     return ob_get_clean();
